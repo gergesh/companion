@@ -146,6 +146,11 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       store.setStreaming(sessionId, null);
       store.setSessionStatus(sessionId, "running");
 
+      // Start timer if not already started (for non-streaming tool calls)
+      if (!store.streamingStartedAt.has(sessionId)) {
+        store.setStreamingStats(sessionId, { startedAt: Date.now() });
+      }
+
       // Extract tasks from tool_use content blocks
       if (msg.content?.length) {
         extractTasksFromBlocks(sessionId, msg.content);
@@ -157,12 +162,27 @@ function handleMessage(sessionId: string, event: MessageEvent) {
     case "stream_event": {
       const evt = data.event as Record<string, unknown>;
       if (evt && typeof evt === "object") {
-        // Handle content_block_delta events for streaming
+        // message_start → mark generation start time
+        if (evt.type === "message_start") {
+          if (!store.streamingStartedAt.has(sessionId)) {
+            store.setStreamingStats(sessionId, { startedAt: Date.now(), outputTokens: 0 });
+          }
+        }
+
+        // content_block_delta → accumulate streaming text
         if (evt.type === "content_block_delta") {
           const delta = evt.delta as Record<string, unknown> | undefined;
           if (delta?.type === "text_delta" && typeof delta.text === "string") {
             const current = store.streaming.get(sessionId) || "";
             store.setStreaming(sessionId, current + delta.text);
+          }
+        }
+
+        // message_delta → extract output token count
+        if (evt.type === "message_delta") {
+          const usage = (evt as { usage?: { output_tokens?: number } }).usage;
+          if (usage?.output_tokens) {
+            store.setStreamingStats(sessionId, { outputTokens: usage.output_tokens });
           }
         }
       }
@@ -187,6 +207,7 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       }
       store.updateSession(sessionId, sessionUpdates);
       store.setStreaming(sessionId, null);
+      store.setStreamingStats(sessionId, null);
       store.setSessionStatus(sessionId, "idle");
       if (r.is_error && r.errors?.length) {
         store.appendMessage(sessionId, {

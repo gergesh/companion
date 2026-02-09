@@ -4,6 +4,18 @@ import { MessageBubble } from "./MessageBubble.js";
 import { getToolIcon, getToolLabel, getPreview, ToolIcon } from "./ToolBlock.js";
 import type { ChatMessage, ContentBlock } from "../types.js";
 
+function formatElapsed(ms: number): string {
+  const secs = Math.floor(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  return `${mins}m ${secs % 60}s`;
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}
+
 const EMPTY_MESSAGES: ChatMessage[] = [];
 
 // ─── Message-level grouping ─────────────────────────────────────────────────
@@ -275,16 +287,34 @@ function FeedEntries({ entries }: { entries: FeedEntry[] }) {
 }
 
 function SubagentContainer({ group }: { group: SubagentGroup }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const label = group.description || "Subagent";
   const agentType = group.agentType;
+  const childCount = group.children.length;
+
+  // Get the last visible entry for a compact preview
+  const lastEntry = group.children[group.children.length - 1];
+  const lastPreview = useMemo(() => {
+    if (!lastEntry) return "";
+    if (lastEntry.kind === "tool_msg_group") {
+      const item = lastEntry.items[lastEntry.items.length - 1];
+      return `${getToolLabel(lastEntry.toolName)}${lastEntry.items.length > 1 ? ` ×${lastEntry.items.length}` : ""}`;
+    }
+    if (lastEntry.kind === "message" && lastEntry.msg.role === "assistant") {
+      const text = lastEntry.msg.content?.trim();
+      if (text) return text.length > 60 ? text.slice(0, 60) + "..." : text;
+      const toolBlock = lastEntry.msg.contentBlocks?.find(b => b.type === "tool_use");
+      if (toolBlock) return getToolLabel((toolBlock as { name: string }).name);
+    }
+    return "";
+  }, [lastEntry]);
 
   return (
     <div className="animate-[fadeSlideIn_0.2s_ease-out]">
       <div className="ml-9 border-l-2 border-cc-primary/20 pl-4">
         <button
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-2 py-1.5 text-left cursor-pointer group mb-2"
+          className="w-full flex items-center gap-2 py-1.5 text-left cursor-pointer mb-1"
         >
           <svg viewBox="0 0 16 16" fill="currentColor" className={`w-3 h-3 text-cc-muted transition-transform shrink-0 ${open ? "rotate-90" : ""}`}>
             <path d="M6 4l4 4-4 4" />
@@ -293,16 +323,24 @@ function SubagentContainer({ group }: { group: SubagentGroup }) {
             <circle cx="8" cy="8" r="5" />
             <path d="M8 5v3l2 1" strokeLinecap="round" />
           </svg>
-          <span className="text-xs font-medium text-cc-fg">{label}</span>
+          <span className="text-xs font-medium text-cc-fg truncate">{label}</span>
           {agentType && (
-            <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5">
+            <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 shrink-0">
               {agentType}
             </span>
           )}
+          {!open && lastPreview && (
+            <span className="text-[11px] text-cc-muted truncate ml-1 font-mono-code">
+              {lastPreview}
+            </span>
+          )}
+          <span className="text-[10px] text-cc-muted bg-cc-hover rounded-full px-1.5 py-0.5 tabular-nums shrink-0 ml-auto">
+            {childCount}
+          </span>
         </button>
 
         {open && (
-          <div className="space-y-3">
+          <div className="space-y-3 pb-2">
             <FeedEntries entries={group.children} />
           </div>
         )}
@@ -326,11 +364,27 @@ function AssistantAvatar() {
 export function MessageFeed({ sessionId }: { sessionId: string }) {
   const messages = useStore((s) => s.messages.get(sessionId) ?? EMPTY_MESSAGES);
   const streamingText = useStore((s) => s.streaming.get(sessionId));
+  const streamingStartedAt = useStore((s) => s.streamingStartedAt.get(sessionId));
+  const streamingOutputTokens = useStore((s) => s.streamingOutputTokens.get(sessionId));
+  const sessionStatus = useStore((s) => s.sessionStatus.get(sessionId));
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottom = useRef(true);
+  const [elapsed, setElapsed] = useState(0);
 
   const grouped = useMemo(() => groupMessages(messages), [messages]);
+
+  // Tick elapsed time every second while generating
+  useEffect(() => {
+    if (!streamingStartedAt && sessionStatus !== "running") {
+      setElapsed(0);
+      return;
+    }
+    const start = streamingStartedAt || Date.now();
+    setElapsed(Date.now() - start);
+    const interval = setInterval(() => setElapsed(Date.now() - start), 1000);
+    return () => clearInterval(interval);
+  }, [streamingStartedAt, sessionStatus]);
 
   function handleScroll() {
     const el = containerRef.current;
@@ -390,6 +444,23 @@ export function MessageFeed({ sessionId }: { sessionId: string }) {
                   </pre>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Generation stats bar */}
+          {sessionStatus === "running" && elapsed > 0 && (
+            <div className="flex items-center gap-1.5 text-[11px] text-cc-muted font-mono-code pl-9">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-cc-primary animate-pulse" />
+              <span>Generating...</span>
+              <span className="text-cc-muted/60">(</span>
+              <span>{formatElapsed(elapsed)}</span>
+              {(streamingOutputTokens ?? 0) > 0 && (
+                <>
+                  <span className="text-cc-muted/40">·</span>
+                  <span>↓ {formatTokens(streamingOutputTokens!)}</span>
+                </>
+              )}
+              <span className="text-cc-muted/60">)</span>
             </div>
           )}
 

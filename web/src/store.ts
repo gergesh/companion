@@ -13,6 +13,10 @@ interface AppState {
   // Streaming partial text per session
   streaming: Map<string, string>;
 
+  // Streaming stats: start time + output tokens
+  streamingStartedAt: Map<string, number>;
+  streamingOutputTokens: Map<string, number>;
+
   // Pending permissions per session (keyed by request_id)
   pendingPermissions: Map<string, PermissionRequest>;
 
@@ -57,6 +61,7 @@ interface AppState {
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
   updateLastAssistantMessage: (sessionId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
   setStreaming: (sessionId: string, text: string | null) => void;
+  setStreamingStats: (sessionId: string, stats: { startedAt?: number; outputTokens?: number } | null) => void;
 
   // Permission actions
   addPermission: (perm: PermissionRequest) => void;
@@ -103,6 +108,8 @@ export const useStore = create<AppState>((set) => ({
   currentSessionId: null,
   messages: new Map(),
   streaming: new Map(),
+  streamingStartedAt: new Map(),
+  streamingOutputTokens: new Map(),
   pendingPermissions: new Map(),
   connectionStatus: new Map(),
   cliConnected: new Map(),
@@ -156,6 +163,10 @@ export const useStore = create<AppState>((set) => ({
       messages.delete(sessionId);
       const streaming = new Map(s.streaming);
       streaming.delete(sessionId);
+      const streamingStartedAt = new Map(s.streamingStartedAt);
+      streamingStartedAt.delete(sessionId);
+      const streamingOutputTokens = new Map(s.streamingOutputTokens);
+      streamingOutputTokens.delete(sessionId);
       const connectionStatus = new Map(s.connectionStatus);
       connectionStatus.delete(sessionId);
       const cliConnected = new Map(s.cliConnected);
@@ -173,6 +184,8 @@ export const useStore = create<AppState>((set) => ({
         sessions,
         messages,
         streaming,
+        streamingStartedAt,
+        streamingOutputTokens,
         connectionStatus,
         cliConnected,
         sessionStatus,
@@ -224,6 +237,20 @@ export const useStore = create<AppState>((set) => ({
         streaming.set(sessionId, text);
       }
       return { streaming };
+    }),
+
+  setStreamingStats: (sessionId, stats) =>
+    set((s) => {
+      const streamingStartedAt = new Map(s.streamingStartedAt);
+      const streamingOutputTokens = new Map(s.streamingOutputTokens);
+      if (stats === null) {
+        streamingStartedAt.delete(sessionId);
+        streamingOutputTokens.delete(sessionId);
+      } else {
+        if (stats.startedAt !== undefined) streamingStartedAt.set(sessionId, stats.startedAt);
+        if (stats.outputTokens !== undefined) streamingOutputTokens.set(sessionId, stats.outputTokens);
+      }
+      return { streamingStartedAt, streamingOutputTokens };
     }),
 
   addPermission: (perm) =>
@@ -311,6 +338,8 @@ export const useStore = create<AppState>((set) => ({
       currentSessionId: null,
       messages: new Map(),
       streaming: new Map(),
+      streamingStartedAt: new Map(),
+      streamingOutputTokens: new Map(),
       pendingPermissions: new Map(),
       connectionStatus: new Map(),
       cliConnected: new Map(),
