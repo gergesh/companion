@@ -21,6 +21,15 @@ async function get<T = unknown>(path: string): Promise<T> {
   return res.json();
 }
 
+async function del<T = unknown>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
 export interface CreateSessionOpts {
   model?: string;
   permissionMode?: string;
@@ -38,4 +47,7 @@ export const api = {
 
   killSession: (sessionId: string) =>
     post(`/sessions/${encodeURIComponent(sessionId)}/kill`),
+
+  deleteSession: (sessionId: string) =>
+    del(`/sessions/${encodeURIComponent(sessionId)}`),
 };

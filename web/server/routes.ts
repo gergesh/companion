@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import type { ControllerBridge } from "./controller-bridge.js";
 import type { CliLauncher } from "./cli-launcher.js";
+import type { WsBridge } from "./ws-bridge.js";
 import type { Message } from "./types.js";
 
-export function createRoutes(bridge: ControllerBridge, launcher?: CliLauncher) {
+export function createRoutes(bridge: ControllerBridge, launcher?: CliLauncher, wsBridge?: WsBridge) {
   const api = new Hono();
 
   // ─── Session ──────────────────────────────────────────────────────
@@ -139,6 +140,23 @@ export function createRoutes(bridge: ControllerBridge, launcher?: CliLauncher) {
     const id = c.req.param("id");
     const killed = await launcher.kill(id);
     if (!killed) return c.json({ error: "Session not found or already exited" }, 404);
+    return c.json({ ok: true });
+  });
+
+  api.delete("/sessions/:id", async (c) => {
+    const id = c.req.param("id");
+
+    // Kill CLI process if still running
+    if (launcher) {
+      await launcher.kill(id);
+      launcher.removeSession(id);
+    }
+
+    // Close all WebSockets and remove from bridge
+    if (wsBridge) {
+      wsBridge.closeSession(id);
+    }
+
     return c.json({ ok: true });
   });
 

@@ -194,6 +194,14 @@ export class CliLauncher {
   }
 
   /**
+   * Remove a session from the internal map (after kill or cleanup).
+   */
+  removeSession(sessionId: string) {
+    this.sessions.delete(sessionId);
+    this.processes.delete(sessionId);
+  }
+
+  /**
    * Remove exited sessions from the list.
    */
   pruneExited(): number {

@@ -38,6 +38,7 @@ interface Session {
   browserSockets: Set<ServerWebSocket<SocketData>>;
   state: SessionState;
   pendingPermissions: Map<string, PermissionRequest>;
+  messageHistory: BrowserIncomingMessage[];
 }
 
 function makeDefaultState(sessionId: string): SessionState {
@@ -73,6 +74,7 @@ export class WsBridge {
         browserSockets: new Set(),
         state: makeDefaultState(sessionId),
         pendingPermissions: new Map(),
+        messageHistory: [],
       };
       this.sessions.set(sessionId, session);
     }
@@ -88,6 +90,28 @@ export class WsBridge {
   }
 
   removeSession(sessionId: string) {
+    this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Close all sockets (CLI + browsers) for a session and remove it.
+   */
+  closeSession(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    // Close CLI socket
+    if (session.cliSocket) {
+      try { session.cliSocket.close(); } catch {}
+      session.cliSocket = null;
+    }
+
+    // Close all browser sockets
+    for (const ws of session.browserSockets) {
+      try { ws.close(); } catch {}
+    }
+    session.browserSockets.clear();
+
     this.sessions.delete(sessionId);
   }
 
@@ -149,6 +173,14 @@ export class WsBridge {
       session: session.state,
     };
     this.sendToBrowser(ws, snapshot);
+
+    // Replay message history so the browser can reconstruct the conversation
+    if (session.messageHistory.length > 0) {
+      this.sendToBrowser(ws, {
+        type: "message_history",
+        messages: session.messageHistory,
+      });
+    }
 
     // Send any pending permission requests
     for (const perm of session.pendingPermissions.values()) {
@@ -240,7 +272,9 @@ export class WsBridge {
 
     if (subtype === "init") {
       const init = msg as unknown as CLISystemInitMessage;
-      session.state.session_id = init.session_id;
+      // Keep the launcher-assigned session_id as the canonical ID.
+      // The CLI may report its own internal session_id which differs
+      // from the launcher UUID, causing duplicate entries in the sidebar.
       session.state.model = init.model;
       session.state.cwd = init.cwd;
       session.state.tools = init.tools;
@@ -271,11 +305,13 @@ export class WsBridge {
   }
 
   private handleAssistantMessage(session: Session, msg: CLIAssistantMessage) {
-    this.broadcastToBrowsers(session, {
+    const browserMsg: BrowserIncomingMessage = {
       type: "assistant",
       message: msg.message,
       parent_tool_use_id: msg.parent_tool_use_id,
-    });
+    };
+    session.messageHistory.push(browserMsg);
+    this.broadcastToBrowsers(session, browserMsg);
   }
 
   private handleResultMessage(session: Session, msg: CLIResultMessage) {
@@ -283,10 +319,12 @@ export class WsBridge {
     session.state.total_cost_usd = msg.total_cost_usd;
     session.state.num_turns = msg.num_turns;
 
-    this.broadcastToBrowsers(session, {
+    const browserMsg: BrowserIncomingMessage = {
       type: "result",
       data: msg,
-    });
+    };
+    session.messageHistory.push(browserMsg);
+    this.broadcastToBrowsers(session, browserMsg);
   }
 
   private handleStreamEvent(session: Session, msg: CLIStreamEventMessage) {
@@ -373,6 +411,13 @@ export class WsBridge {
     session: Session,
     msg: { type: "user_message"; content: string; session_id?: string }
   ) {
+    // Store user message in history for replay
+    session.messageHistory.push({
+      type: "user_message",
+      content: msg.content,
+      timestamp: Date.now(),
+    });
+
     const ndjson = JSON.stringify({
       type: "user",
       message: { role: "user", content: msg.content },

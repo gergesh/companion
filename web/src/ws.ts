@@ -161,6 +161,47 @@ function handleMessage(sessionId: string, event: MessageEvent) {
       store.setCliConnected(sessionId, true);
       break;
     }
+
+    case "message_history": {
+      const chatMessages: ChatMessage[] = [];
+      for (const histMsg of data.messages) {
+        if (histMsg.type === "user_message") {
+          chatMessages.push({
+            id: nextId(),
+            role: "user",
+            content: histMsg.content,
+            timestamp: histMsg.timestamp,
+          });
+        } else if (histMsg.type === "assistant") {
+          const msg = histMsg.message;
+          const textContent = extractTextFromBlocks(msg.content);
+          chatMessages.push({
+            id: msg.id,
+            role: "assistant",
+            content: textContent,
+            contentBlocks: msg.content,
+            timestamp: Date.now(),
+            parentToolUseId: histMsg.parent_tool_use_id,
+            model: msg.model,
+            stopReason: msg.stop_reason,
+          });
+        } else if (histMsg.type === "result") {
+          const r = histMsg.data;
+          if (r.is_error && r.errors?.length) {
+            chatMessages.push({
+              id: nextId(),
+              role: "system",
+              content: `Error: ${r.errors.join(", ")}`,
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
+      if (chatMessages.length > 0) {
+        store.setMessages(sessionId, chatMessages);
+      }
+      break;
+    }
   }
 }
 

@@ -41,6 +41,7 @@ interface AppState {
 
   // Message actions
   appendMessage: (sessionId: string, msg: ChatMessage) => void;
+  setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
   updateLastAssistantMessage: (sessionId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
   setStreaming: (sessionId: string, text: string | null) => void;
 
@@ -115,10 +116,20 @@ export const useStore = create<AppState>((set) => ({
       messages.delete(sessionId);
       const streaming = new Map(s.streaming);
       streaming.delete(sessionId);
+      const connectionStatus = new Map(s.connectionStatus);
+      connectionStatus.delete(sessionId);
+      const cliConnected = new Map(s.cliConnected);
+      cliConnected.delete(sessionId);
+      const sessionStatus = new Map(s.sessionStatus);
+      sessionStatus.delete(sessionId);
       return {
         sessions,
         messages,
         streaming,
+        connectionStatus,
+        cliConnected,
+        sessionStatus,
+        sdkSessions: s.sdkSessions.filter((sdk) => sdk.sessionId !== sessionId),
         currentSessionId: s.currentSessionId === sessionId ? null : s.currentSessionId,
       };
     }),
@@ -130,6 +141,13 @@ export const useStore = create<AppState>((set) => ({
       const messages = new Map(s.messages);
       const list = [...(messages.get(sessionId) || []), msg];
       messages.set(sessionId, list);
+      return { messages };
+    }),
+
+  setMessages: (sessionId, msgs) =>
+    set((s) => {
+      const messages = new Map(s.messages);
+      messages.set(sessionId, msgs);
       return { messages };
     }),
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useStore } from "../store.js";
 import { api } from "../api.js";
 import { connectSession, disconnectSession } from "../ws.js";
@@ -14,6 +14,7 @@ export function Sidebar() {
   const toggleDarkMode = useStore((s) => s.toggleDarkMode);
   const cliConnected = useStore((s) => s.cliConnected);
   const sessionStatus = useStore((s) => s.sessionStatus);
+  const removeSession = useStore((s) => s.removeSession);
 
   // Poll for SDK sessions on mount
   useEffect(() => {
@@ -54,6 +55,17 @@ export function Sidebar() {
     setCurrentSession(sessionId);
     connectSession(sessionId);
   }
+
+  const handleDeleteSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    try {
+      disconnectSession(sessionId);
+      await api.deleteSession(sessionId);
+    } catch {
+      // best-effort
+    }
+    removeSession(sessionId);
+  }, [removeSession]);
 
   // Combine sessions from WsBridge state + SDK sessions list
   const allSessionIds = new Set<string>();
@@ -115,44 +127,54 @@ export function Sidebar() {
               const isCompacting = s.status === "compacting";
 
               return (
-                <button
-                  key={s.id}
-                  onClick={() => handleSelectSession(s.id)}
-                  className={`w-full px-3 py-2.5 text-left rounded-[10px] transition-all duration-100 cursor-pointer group ${
-                    isActive
-                      ? "bg-cc-active"
-                      : "hover:bg-cc-hover"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex shrink-0">
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          s.sdkState === "exited"
-                            ? "bg-cc-muted opacity-40"
-                            : s.isConnected
-                            ? isRunning
-                              ? "bg-cc-success"
-                              : isCompacting
-                              ? "bg-cc-warning"
-                              : "bg-cc-success opacity-60"
-                            : "bg-cc-muted opacity-40"
-                        }`}
-                      />
-                      {isRunning && s.isConnected && (
-                        <span className="absolute inset-0 w-2 h-2 rounded-full bg-cc-success/40 animate-[pulse-dot_1.5s_ease-in-out_infinite]" />
-                      )}
-                    </span>
-                    <span className="text-[13px] font-medium truncate flex-1 text-cc-fg">
-                      {label}
-                    </span>
-                  </div>
-                  {dirName && (
-                    <p className="text-[11px] text-cc-muted truncate mt-0.5 ml-4">
-                      {dirName}
-                    </p>
-                  )}
-                </button>
+                <div key={s.id} className="relative group">
+                  <button
+                    onClick={() => handleSelectSession(s.id)}
+                    className={`w-full px-3 py-2.5 pr-8 text-left rounded-[10px] transition-all duration-100 cursor-pointer ${
+                      isActive
+                        ? "bg-cc-active"
+                        : "hover:bg-cc-hover"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex shrink-0">
+                        <span
+                          className={`w-2 h-2 rounded-full ${
+                            s.sdkState === "exited"
+                              ? "bg-cc-muted opacity-40"
+                              : s.isConnected
+                              ? isRunning
+                                ? "bg-cc-success"
+                                : isCompacting
+                                ? "bg-cc-warning"
+                                : "bg-cc-success opacity-60"
+                              : "bg-cc-muted opacity-40"
+                          }`}
+                        />
+                        {isRunning && s.isConnected && (
+                          <span className="absolute inset-0 w-2 h-2 rounded-full bg-cc-success/40 animate-[pulse-dot_1.5s_ease-in-out_infinite]" />
+                        )}
+                      </span>
+                      <span className="text-[13px] font-medium truncate flex-1 text-cc-fg">
+                        {label}
+                      </span>
+                    </div>
+                    {dirName && (
+                      <p className="text-[11px] text-cc-muted truncate mt-0.5 ml-4">
+                        {dirName}
+                      </p>
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteSession(e, s.id)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-cc-border text-cc-muted hover:text-cc-fg transition-all cursor-pointer"
+                    title="Delete session"
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+                      <path d="M4 4l8 8M12 4l-8 8" />
+                    </svg>
+                  </button>
+                </div>
               );
             })}
           </div>

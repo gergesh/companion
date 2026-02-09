@@ -171,7 +171,9 @@ export type BrowserIncomingMessage =
   | { type: "auth_status"; isAuthenticating: boolean; output: string[]; error?: string }
   | { type: "error"; message: string }
   | { type: "cli_disconnected" }
-  | { type: "cli_connected" };
+  | { type: "cli_connected" }
+  | { type: "user_message"; content: string; timestamp: number }
+  | { type: "message_history"; messages: BrowserIncomingMessage[] };
 
 // ─── Session State ────────────────────────────────────────────────────────────
 

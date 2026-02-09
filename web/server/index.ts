@@ -20,7 +20,7 @@ const launcher = new CliLauncher(bridge.ws, port);
 const app = new Hono();
 
 app.use("/api/*", cors());
-app.route("/api", createRoutes(bridge, launcher));
+app.route("/api", createRoutes(bridge, launcher, wsBridge));
 
 // In production, serve built frontend
 if (process.env.NODE_ENV === "production") {
