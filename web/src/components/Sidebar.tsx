@@ -43,6 +43,10 @@ export function Sidebar() {
     }
     setCurrentSession(sessionId);
     connectSession(sessionId);
+    // Close sidebar on mobile
+    if (window.innerWidth < 768) {
+      useStore.getState().setSidebarOpen(false);
+    }
   }
 
   async function handleCreateSession(opts: { model?: string; permissionMode?: string; cwd?: string }) {

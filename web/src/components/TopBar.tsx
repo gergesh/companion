@@ -42,7 +42,7 @@ export function TopBar() {
                 isConnected ? "bg-cc-success" : "bg-cc-muted opacity-40"
               }`}
             />
-            <span className="text-[11px] text-cc-muted">
+            <span className="text-[11px] text-cc-muted hidden sm:inline">
               {isConnected ? "Connected" : "Disconnected"}
             </span>
           </div>
@@ -68,37 +68,33 @@ export function TopBar() {
           />
 
           {session.total_cost_usd > 0 && (
-            <>
+            <div className="hidden sm:flex items-center gap-1.5">
               <span className="text-cc-border">|</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-cc-muted/60">Cost</span>
-                <span className="font-medium text-cc-fg tabular-nums">${session.total_cost_usd.toFixed(4)}</span>
-              </div>
-            </>
+              <span className="text-cc-muted/60">Cost</span>
+              <span className="font-medium text-cc-fg tabular-nums">${session.total_cost_usd.toFixed(4)}</span>
+            </div>
           )}
 
           {session.context_used_percent > 0 && (
-            <>
+            <div className="hidden md:flex items-center gap-1.5">
               <span className="text-cc-border">|</span>
+              <span className="text-cc-muted/60">Context</span>
               <div className="flex items-center gap-1.5">
-                <span className="text-cc-muted/60">Context</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-16 h-1.5 rounded-full bg-cc-hover overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        session.context_used_percent > 80
-                          ? "bg-cc-error"
-                          : session.context_used_percent > 50
-                          ? "bg-cc-warning"
-                          : "bg-cc-primary"
-                      }`}
-                      style={{ width: `${Math.min(session.context_used_percent, 100)}%` }}
-                    />
-                  </div>
-                  <span className="font-medium text-cc-fg tabular-nums">{session.context_used_percent}%</span>
+                <div className="w-16 h-1.5 rounded-full bg-cc-hover overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      session.context_used_percent > 80
+                        ? "bg-cc-error"
+                        : session.context_used_percent > 50
+                        ? "bg-cc-warning"
+                        : "bg-cc-primary"
+                    }`}
+                    style={{ width: `${Math.min(session.context_used_percent, 100)}%` }}
+                  />
                 </div>
+                <span className="font-medium text-cc-fg tabular-nums">{session.context_used_percent}%</span>
               </div>
-            </>
+            </div>
           )}
 
           {status === "compacting" && (

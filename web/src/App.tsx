@@ -15,12 +15,23 @@ export default function App() {
   }, [darkMode]);
 
   return (
-    <div className="h-screen flex font-sans-ui bg-cc-bg text-cc-fg antialiased">
-      {/* Sidebar */}
+    <div className="h-[100dvh] flex font-sans-ui bg-cc-bg text-cc-fg antialiased">
+      {/* Mobile overlay backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 z-30 md:hidden"
+          onClick={() => useStore.getState().setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — overlay on mobile, inline on desktop */}
       <div
-        className={`shrink-0 transition-all duration-200 ${
-          sidebarOpen ? "w-[260px]" : "w-0"
-        } overflow-hidden`}
+        className={`
+          fixed md:relative z-40 md:z-auto
+          h-full shrink-0 transition-all duration-200
+          ${sidebarOpen ? "w-[260px] translate-x-0" : "w-0 -translate-x-full md:translate-x-0"}
+          overflow-hidden
+        `}
       >
         <Sidebar />
       </div>

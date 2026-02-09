@@ -242,10 +242,10 @@ export function HomePage() {
   const canSend = text.trim().length > 0 && !sending;
 
   return (
-    <div className="flex-1 h-full flex items-center justify-center px-4">
+    <div className="flex-1 h-full flex items-center justify-center px-3 sm:px-4">
       <div className="w-full max-w-2xl">
         {/* Title */}
-        <h1 className="text-2xl font-semibold text-cc-fg text-center mb-6">
+        <h1 className="text-xl sm:text-2xl font-semibold text-cc-fg text-center mb-4 sm:mb-6">
           What can I work on for you?
         </h1>
 
@@ -364,7 +364,7 @@ export function HomePage() {
         </div>
 
         {/* Below-card selectors */}
-        <div className="flex items-center gap-3 mt-3 px-1">
+        <div className="flex items-center gap-2 sm:gap-3 mt-2 sm:mt-3 px-1 flex-wrap">
           {/* Folder selector */}
           <div className="relative" ref={dirDropdownRef}>
             <button
@@ -388,7 +388,7 @@ export function HomePage() {
               </svg>
             </button>
             {showDirDropdown && (
-              <div className="absolute left-0 bottom-full mb-1 w-80 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 overflow-hidden">
+              <div className="absolute left-0 bottom-full mb-1 w-[calc(100vw-2rem)] sm:w-80 max-w-80 bg-cc-card border border-cc-border rounded-[10px] shadow-lg z-10 overflow-hidden">
                 {/* Current path display + manual input toggle */}
                 <div className="px-3 py-2 border-b border-cc-border flex items-center gap-2">
                   {showDirInput ? (

@@ -140,7 +140,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const canSend = text.trim().length > 0 && isConnected;
 
   return (
-    <div className="shrink-0 border-t border-cc-border bg-cc-card px-4 py-3">
+    <div className="shrink-0 border-t border-cc-border bg-cc-card px-2 sm:px-4 py-2 sm:py-3">
       <div className="max-w-3xl mx-auto">
         {/* Image thumbnails */}
         {images.length > 0 && (

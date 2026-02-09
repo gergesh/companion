@@ -82,7 +82,7 @@ export const useStore = create<AppState>((set) => ({
   sessionStatus: new Map(),
   previousPermissionMode: new Map(),
   darkMode: getInitialDarkMode(),
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== "undefined" ? window.innerWidth >= 768 : true,
 
   setDarkMode: (v) => {
     localStorage.setItem("cc-dark-mode", String(v));
