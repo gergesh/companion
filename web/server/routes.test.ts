@@ -27,6 +27,9 @@ vi.mock("./git-utils.js", () => ({
   listBranches: vi.fn(() => []),
   listWorktrees: vi.fn(() => []),
   ensureWorktree: vi.fn(),
+  gitFetch: vi.fn(() => ({ success: true, output: "" })),
+  gitPull: vi.fn(() => ({ success: true, output: "" })),
+  checkoutBranch: vi.fn(),
   removeWorktree: vi.fn(),
   isWorktreeDirty: vi.fn(() => false),
 }));
@@ -202,6 +205,54 @@ describe("POST /api/sessions/create", () => {
         branch: "feat-branch",
         actualBranch: "feat-branch",
       }),
+    );
+  });
+
+  it("fetches and pulls before create when branch matches current branch", async () => {
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: "/repo",
+      repoName: "my-repo",
+      currentBranch: "main",
+      defaultBranch: "main",
+      isWorktree: false,
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/repo", branch: "main" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(gitUtils.gitFetch).toHaveBeenCalledWith("/repo");
+    expect(gitUtils.checkoutBranch).not.toHaveBeenCalled();
+    expect(gitUtils.gitPull).toHaveBeenCalledWith("/repo");
+  });
+
+  it("fetches, checks out selected branch, then pulls before create", async () => {
+    vi.mocked(gitUtils.getRepoInfo).mockReturnValue({
+      repoRoot: "/repo",
+      repoName: "my-repo",
+      currentBranch: "develop",
+      defaultBranch: "main",
+      isWorktree: false,
+    });
+
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: "/repo", branch: "main" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(gitUtils.gitFetch).toHaveBeenCalledWith("/repo");
+    expect(gitUtils.checkoutBranch).toHaveBeenCalledWith("/repo", "main");
+    expect(gitUtils.gitPull).toHaveBeenCalledWith("/repo");
+    expect(vi.mocked(gitUtils.gitFetch).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(gitUtils.checkoutBranch).mock.invocationCallOrder[0],
+    );
+    expect(vi.mocked(gitUtils.checkoutBranch).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(gitUtils.gitPull).mock.invocationCallOrder[0],
     );
   });
 
