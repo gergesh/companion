@@ -86,7 +86,7 @@ afterEach(() => {
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function plistPath(): string {
-  return join(tempDir, "Library", "LaunchAgents", "co.thevibecompany.companion.plist");
+  return join(tempDir, "Library", "LaunchAgents", "sh.thecompanion.app.plist");
 }
 
 function logDir(): string {
@@ -98,55 +98,55 @@ function logDir(): string {
 // ===========================================================================
 describe("generatePlist", () => {
   it("generates valid XML with the correct label", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion" });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion" });
     expect(plist).toContain('<?xml version="1.0"');
-    expect(plist).toContain("<string>co.thevibecompany.companion</string>");
+    expect(plist).toContain("<string>sh.thecompanion.app</string>");
   });
 
   it("includes RunAtLoad true", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion" });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion" });
     expect(plist).toContain("<key>RunAtLoad</key>");
     expect(plist).toContain("<true/>");
   });
 
   it("includes KeepAlive with SuccessfulExit false", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion" });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion" });
     expect(plist).toContain("<key>KeepAlive</key>");
     expect(plist).toContain("<key>SuccessfulExit</key>");
     expect(plist).toContain("<false/>");
   });
 
   it("uses the provided binary path in ProgramArguments", () => {
-    const plist = service.generatePlist({ binPath: "/opt/homebrew/bin/the-vibe-companion" });
-    expect(plist).toContain("<string>/opt/homebrew/bin/the-vibe-companion</string>");
+    const plist = service.generatePlist({ binPath: "/opt/homebrew/bin/the-companion" });
+    expect(plist).toContain("<string>/opt/homebrew/bin/the-companion</string>");
     expect(plist).toContain("<string>start</string>");
   });
 
   it("uses the default production port when none specified", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion" });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion" });
     expect(plist).toContain("<key>PORT</key>");
     expect(plist).toContain("<string>3456</string>");
   });
 
   it("uses a custom port when specified", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion", port: 8080 });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion", port: 8080 });
     expect(plist).toContain("<string>8080</string>");
   });
 
   it("includes NODE_ENV production", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion" });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion" });
     expect(plist).toContain("<key>NODE_ENV</key>");
     expect(plist).toContain("<string>production</string>");
   });
 
   it("includes PATH with homebrew and bun directories", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion" });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion" });
     expect(plist).toContain("/opt/homebrew/bin");
     expect(plist).toContain(".bun/bin");
   });
 
   it("includes ThrottleInterval", () => {
-    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-vibe-companion" });
+    const plist = service.generatePlist({ binPath: "/usr/local/bin/the-companion" });
     expect(plist).toContain("<key>ThrottleInterval</key>");
     expect(plist).toContain("<integer>5</integer>");
   });
@@ -158,7 +158,7 @@ describe("generatePlist", () => {
 describe("install", () => {
   it("creates log directory and writes plist file", async () => {
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl load")) return "";
       return "";
     });
@@ -169,12 +169,12 @@ describe("install", () => {
     expect(existsSync(plistPath())).toBe(true);
 
     const content = readFileSync(plistPath(), "utf-8");
-    expect(content).toContain("co.thevibecompany.companion");
+    expect(content).toContain("sh.thecompanion.app");
   });
 
   it("calls launchctl load with the plist path", async () => {
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl load")) return "";
       return "";
     });
@@ -191,7 +191,7 @@ describe("install", () => {
   it("exits with error if already installed", async () => {
     // First install
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl")) return "";
       return "";
     });
@@ -214,7 +214,7 @@ describe("install", () => {
 
   it("uses custom port when provided", async () => {
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl")) return "";
       return "";
     });
@@ -227,7 +227,7 @@ describe("install", () => {
 
   it("cleans up plist if launchctl load fails", async () => {
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl load")) throw new Error("launchctl failed");
       return "";
     });
@@ -244,7 +244,7 @@ describe("uninstall", () => {
   it("calls launchctl unload and removes plist", async () => {
     // Install first
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl")) return "";
       return "";
     });
@@ -282,7 +282,7 @@ describe("status", () => {
   it("returns installed: true, running: true with PID", async () => {
     // Install first
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl load")) return "";
       return "";
     });
@@ -293,7 +293,7 @@ describe("status", () => {
     mockExecSync.mockReset();
     mockExecSync.mockImplementation((cmd: string) => {
       if (typeof cmd === "string" && cmd.includes("launchctl list")) {
-        return `{\n\t"PID" = 12345;\n\t"Label" = "co.thevibecompany.companion";\n}`;
+        return `{\n\t"PID" = 12345;\n\t"Label" = "sh.thecompanion.app";\n}`;
       }
       return "";
     });
@@ -308,7 +308,7 @@ describe("status", () => {
   it("returns installed: true, running: false when service is loaded but not running", async () => {
     // Install first
     mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd.startsWith("which")) return "/usr/local/bin/the-vibe-companion\n";
+      if (cmd.startsWith("which")) return "/usr/local/bin/the-companion\n";
       if (cmd.startsWith("launchctl load")) return "";
       return "";
     });
@@ -319,7 +319,7 @@ describe("status", () => {
     mockExecSync.mockReset();
     mockExecSync.mockImplementation((cmd: string) => {
       if (typeof cmd === "string" && cmd.includes("launchctl list")) {
-        return `{\n\t"Label" = "co.thevibecompany.companion";\n}`;
+        return `{\n\t"Label" = "sh.thecompanion.app";\n}`;
       }
       return "";
     });

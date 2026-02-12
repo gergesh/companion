@@ -10,5 +10,8 @@ export default defineConfig({
       ["src/**/*.test.tsx", "jsdom"],
     ],
     setupFiles: ["src/test-setup.ts"],
+    env: {
+      NODE_ENV: "test",
+    },
   },
 });
