@@ -732,7 +732,7 @@ export function createRoutes(
           return;
         }
         console.log(
-          "[update] Update successful, exiting for launchd restart...",
+          "[update] Update successful, exiting for service restart...",
         );
         // Exit with non-zero code so launchd restarts us
         process.exit(42);
