@@ -10,6 +10,7 @@ import { TaskPanel } from "./components/TaskPanel.js";
 import { DiffPanel } from "./components/DiffPanel.js";
 import { Playground } from "./components/Playground.js";
 import { UpdateBanner } from "./components/UpdateBanner.js";
+import { TerminalView } from "./components/TerminalView.js";
 
 function useHash() {
   return useSyncExternalStore(
@@ -25,6 +26,8 @@ export default function App() {
   const taskPanelOpen = useStore((s) => s.taskPanelOpen);
   const homeResetKey = useStore((s) => s.homeResetKey);
   const activeTab = useStore((s) => s.activeTab);
+  const terminalOpen = useStore((s) => s.terminalOpen);
+  const terminalCwd = useStore((s) => s.terminalCwd);
   const hash = useHash();
 
   useEffect(() => {
@@ -122,6 +125,14 @@ export default function App() {
             <TaskPanel sessionId={currentSessionId} />
           </div>
         </>
+      )}
+
+      {/* Global terminal overlay */}
+      {terminalOpen && terminalCwd && (
+        <TerminalView
+          cwd={terminalCwd}
+          onClose={() => useStore.getState().closeTerminal()}
+        />
       )}
     </div>
   );
