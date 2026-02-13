@@ -915,9 +915,12 @@ export function createRoutes(
         // Explicitly restart via the service manager in a detached process
         // so the restart survives our own exit.
         const isLinux = process.platform === "linux";
+        const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
         const restartCmd = isLinux
           ? ["systemctl", "--user", "restart", "the-companion.service"]
-          : ["launchctl", "kickstart", "-k", `gui/${process.getuid?.()}/${"sh.thecompanion.app"}`];
+          : uid !== undefined
+            ? ["launchctl", "kickstart", "-k", `gui/${uid}/sh.thecompanion.app`]
+            : ["launchctl", "kickstart", "-k", "sh.thecompanion.app"];
 
         Bun.spawn(restartCmd, {
           stdout: "ignore",
