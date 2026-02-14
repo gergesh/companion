@@ -92,7 +92,7 @@ export const ${pluginConstName}: PluginDefinition<${configTypeName}> = {
     return {
       insights: [
         {
-          id: "${pluginId}-\${Date.now()}",
+          id: \`${pluginId}-\${Date.now()}\`,
           plugin_id: "${pluginId}",
           title: "Plugin initialized",
           message: "Replace this insight with your plugin behavior.",
