@@ -3,4 +3,4 @@ set -eu
 
 cd web
 bun run typecheck
-bun run test
+bun run test -- --coverage

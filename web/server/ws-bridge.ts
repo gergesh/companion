@@ -1245,14 +1245,6 @@ export class WsBridge {
           request: perm,
         });
         this.persistSession(session);
-      }).catch((err) => {
-        console.error(`[ws-bridge] Plugin emit failed in Claude permission flow, falling back:`, err);
-        session.pendingPermissions.set(msg.request_id, perm);
-        this.broadcastToBrowsers(session, {
-          type: "permission_request",
-          request: perm,
-        });
-        this.persistSession(session);
       }).catch((err: unknown) => {
         console.error(`[ws-bridge] Plugin emit failed in Claude permission flow, falling back:`, err);
         session.pendingPermissions.set(msg.request_id, perm);
