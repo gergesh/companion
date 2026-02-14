@@ -21,7 +21,10 @@ interface MockStoreState {
   sessions: Map<string, { cwd?: string }>;
   sdkSessions: { sessionId: string; cwd?: string }[];
   changedFiles: Map<string, Set<string>>;
-  pluginInsights: Map<string, { id: string }[]>;
+  pluginInsights: Map<string, { id: string; plugin_id: string }[]>;
+  plugins: Array<{ id: string; name: string; enabled: boolean }>;
+  taskbarPluginPins: Set<string>;
+  setTaskbarPluginFocus: ReturnType<typeof vi.fn>;
 }
 
 let storeState: MockStoreState;
@@ -41,6 +44,9 @@ function resetStore(overrides: Partial<MockStoreState> = {}) {
     sdkSessions: [],
     changedFiles: new Map(),
     pluginInsights: new Map(),
+    plugins: [],
+    taskbarPluginPins: new Set(),
+    setTaskbarPluginFocus: vi.fn(),
     ...overrides,
   };
 }
@@ -79,5 +85,19 @@ describe("TopBar", () => {
 
     render(<TopBar />);
     expect(screen.queryByText("1")).not.toBeInTheDocument();
+  });
+
+  it("renders pinned plugin quick action and focuses panel on click", () => {
+    resetStore({
+      plugins: [{ id: "notifications", name: "Notifications", enabled: true }],
+      taskbarPluginPins: new Set(["notifications"]),
+    });
+
+    render(<TopBar />);
+    const quickAction = screen.getByTitle("Open Notifications insights in session panel");
+    quickAction.click();
+
+    expect(storeState.setTaskPanelOpen).toHaveBeenCalledWith(true);
+    expect(storeState.setTaskbarPluginFocus).toHaveBeenCalledWith("notifications");
   });
 });

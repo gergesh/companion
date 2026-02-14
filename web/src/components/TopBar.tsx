@@ -39,6 +39,19 @@ export function TopBar() {
     if (!currentSessionId) return 0;
     return s.pluginInsights.get(currentSessionId)?.length || 0;
   });
+  const taskbarPluginPins = useStore((s) => s.taskbarPluginPins);
+  const plugins = useStore((s) => s.plugins);
+  const setTaskbarPluginFocus = useStore((s) => s.setTaskbarPluginFocus);
+  const pluginInsightCountByPlugin = useStore((s) => {
+    if (!currentSessionId) return new Map<string, number>();
+    const counts = new Map<string, number>();
+    const insights = s.pluginInsights.get(currentSessionId) || [];
+    for (const insight of insights) {
+      counts.set(insight.plugin_id, (counts.get(insight.plugin_id) || 0) + 1);
+    }
+    return counts;
+  });
+  const pinnedTaskbarPlugins = plugins.filter((plugin) => plugin.enabled && taskbarPluginPins.has(plugin.id));
 
   const cwd = useStore((s) => {
     if (!currentSessionId) return null;
@@ -155,8 +168,36 @@ export function TopBar() {
             </button>
           )}
 
+          {pinnedTaskbarPlugins.map((plugin) => {
+            const pluginInsightCount = pluginInsightCountByPlugin.get(plugin.id) || 0;
+            const compactName = plugin.name.length > 12 ? `${plugin.name.slice(0, 12)}…` : plugin.name;
+            return (
+              <button
+                key={plugin.id}
+                onClick={() => {
+                  setTaskPanelOpen(true);
+                  setTaskbarPluginFocus(plugin.id);
+                }}
+                className="relative px-2 py-1 rounded-md text-[11px] font-medium text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                title={`Open ${plugin.name} insights in session panel`}
+              >
+                {compactName}
+                {pluginInsightCount > 0 && (
+                  <span className="absolute -top-1 -right-1 text-[9px] bg-cc-primary text-white rounded-full min-w-[14px] h-[14px] px-1 flex items-center justify-center font-semibold leading-none">
+                    {Math.min(pluginInsightCount, 99)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
           <button
-            onClick={() => setTaskPanelOpen(!taskPanelOpen)}
+            onClick={() => {
+              setTaskPanelOpen(!taskPanelOpen);
+              if (taskPanelOpen) {
+                setTaskbarPluginFocus(null);
+              }
+            }}
             className={`relative flex items-center justify-center w-7 h-7 rounded-lg transition-colors cursor-pointer ${
               taskPanelOpen
                 ? "text-cc-primary bg-cc-active"

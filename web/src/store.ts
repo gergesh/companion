@@ -53,6 +53,8 @@ interface AppState {
 
   // Plugin catalog/config
   plugins: PluginRuntimeInfo[];
+  taskbarPluginPins: Set<string>;
+  taskbarPluginFocus: string | null;
 
   // Sidebar project grouping
   collapsedProjects: Set<string>;
@@ -124,6 +126,8 @@ interface AppState {
   addPluginInsight: (sessionId: string, insight: PluginInsight) => void;
   clearPluginInsights: (sessionId: string) => void;
   setPlugins: (plugins: PluginRuntimeInfo[]) => void;
+  setTaskbarPluginPinned: (pluginId: string, pinned: boolean) => void;
+  setTaskbarPluginFocus: (pluginId: string | null) => void;
 
   // Sidebar project grouping actions
   toggleProjectCollapse: (projectKey: string) => void;
@@ -208,6 +212,15 @@ function getInitialCollapsedProjects(): Set<string> {
   }
 }
 
+function getInitialTaskbarPluginPins(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    return new Set(JSON.parse(localStorage.getItem("cc-taskbar-plugin-pins") || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
 export const useStore = create<AppState>((set) => ({
   sessions: new Map(),
   sdkSessions: [],
@@ -229,6 +242,8 @@ export const useStore = create<AppState>((set) => ({
   mcpServers: new Map(),
   pluginInsights: new Map(),
   plugins: [],
+  taskbarPluginPins: getInitialTaskbarPluginPins(),
+  taskbarPluginFocus: null,
   collapsedProjects: getInitialCollapsedProjects(),
   updateInfo: null,
   updateDismissedVersion: getInitialDismissedVersion(),
@@ -553,6 +568,20 @@ export const useStore = create<AppState>((set) => ({
 
   setPlugins: (plugins) => set({ plugins }),
 
+  setTaskbarPluginPinned: (pluginId, pinned) =>
+    set((s) => {
+      const taskbarPluginPins = new Set(s.taskbarPluginPins);
+      if (pinned) {
+        taskbarPluginPins.add(pluginId);
+      } else {
+        taskbarPluginPins.delete(pluginId);
+      }
+      localStorage.setItem("cc-taskbar-plugin-pins", JSON.stringify(Array.from(taskbarPluginPins)));
+      return { taskbarPluginPins };
+    }),
+
+  setTaskbarPluginFocus: (pluginId) => set({ taskbarPluginFocus: pluginId }),
+
   toggleProjectCollapse: (projectKey) =>
     set((s) => {
       const collapsedProjects = new Set(s.collapsedProjects);
@@ -639,6 +668,8 @@ export const useStore = create<AppState>((set) => ({
       mcpServers: new Map(),
       pluginInsights: new Map(),
       plugins: [],
+      taskbarPluginPins: getInitialTaskbarPluginPins(),
+      taskbarPluginFocus: null,
       prStatus: new Map(),
       activeTab: "chat" as const,
       diffPanelSelectedFile: new Map(),

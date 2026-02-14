@@ -91,4 +91,14 @@ describe("PluginsPage", () => {
       expect(apiMock.disablePlugin).toHaveBeenCalledWith("notifications");
     });
   });
+
+  it("pins plugin to taskbar", async () => {
+    render(<PluginsPage embedded />);
+    const pinButton = await screen.findByRole("button", { name: "Pin to taskbar" });
+    fireEvent.click(pinButton);
+
+    await waitFor(() => {
+      expect(useStore.getState().taskbarPluginPins.has("notifications")).toBe(true);
+    });
+  });
 });

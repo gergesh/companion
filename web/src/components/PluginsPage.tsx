@@ -17,34 +17,46 @@ function stringifyConfig(config: unknown): string {
 export function PluginsPage({ embedded = false }: PluginsPageProps) {
   const plugins = useStore((s) => s.plugins);
   const setPlugins = useStore((s) => s.setPlugins);
+  const currentSessionId = useStore((s) => s.currentSessionId);
+  const taskbarPluginPins = useStore((s) => s.taskbarPluginPins);
+  const setTaskbarPluginPinned = useStore((s) => s.setTaskbarPluginPinned);
+  const setTaskbarPluginFocus = useStore((s) => s.setTaskbarPluginFocus);
+  const setTaskPanelOpen = useStore((s) => s.setTaskPanelOpen);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Map<string, string>>(new Map());
 
+  async function refreshPlugins() {
+    const list = await api.listPlugins();
+    setPlugins(list);
+    const drafts = new Map<string, string>();
+    for (const plugin of list) {
+      drafts.set(plugin.id, stringifyConfig(plugin.config));
+    }
+    setDraftById(drafts);
+    return list;
+  }
+
   useEffect(() => {
-    api
-      .listPlugins()
-      .then((list) => {
-        setPlugins(list);
-        const drafts = new Map<string, string>();
-        for (const plugin of list) {
-          drafts.set(plugin.id, stringifyConfig(plugin.config));
-        }
-        setDraftById(drafts);
-      })
+    refreshPlugins()
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => setLoading(false));
-  }, [setPlugins]);
+  // refreshPlugins updates global and local plugin states.
+  }, []);
 
   async function updatePlugin(plugin: PluginRuntimeInfo, enabled: boolean) {
     setSavingId(plugin.id);
     setError("");
     try {
-      const updated = enabled ? await api.enablePlugin(plugin.id) : await api.disablePlugin(plugin.id);
-      setPlugins(plugins.map((p) => (p.id === updated.id ? updated : p)));
+      if (enabled) {
+        await api.enablePlugin(plugin.id);
+      } else {
+        await api.disablePlugin(plugin.id);
+      }
+      await refreshPlugins();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -59,7 +71,7 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
       const raw = draftById.get(plugin.id) || "{}";
       const parsed = JSON.parse(raw) as unknown;
       const updated = await api.updatePluginConfig(plugin.id, parsed);
-      setPlugins(plugins.map((p) => (p.id === updated.id ? updated : p)));
+      await refreshPlugins();
       setDraftById((prev) => {
         const next = new Map(prev);
         next.set(plugin.id, stringifyConfig(updated.config));
@@ -124,6 +136,35 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
               >
                 {savingId === plugin.id ? "Saving..." : plugin.enabled ? "Enabled" : "Disabled"}
               </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] text-cc-muted">
+                Taskbar: expose a quick action in the top bar for this plugin.
+              </p>
+              <div className="flex items-center gap-2">
+                {currentSessionId && (
+                  <button
+                    onClick={() => {
+                      setTaskPanelOpen(true);
+                      setTaskbarPluginFocus(plugin.id);
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-[11px] text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
+                  >
+                    Open in panel
+                  </button>
+                )}
+                <button
+                  onClick={() => setTaskbarPluginPinned(plugin.id, !taskbarPluginPins.has(plugin.id))}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer ${
+                    taskbarPluginPins.has(plugin.id)
+                      ? "bg-cc-primary/15 text-cc-primary hover:bg-cc-primary/20"
+                      : "bg-cc-hover text-cc-muted hover:text-cc-fg"
+                  }`}
+                >
+                  {taskbarPluginPins.has(plugin.id) ? "Pinned" : "Pin to taskbar"}
+                </button>
+              </div>
             </div>
 
             <div>
