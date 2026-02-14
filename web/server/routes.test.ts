@@ -14,8 +14,61 @@ vi.mock("node:child_process", () => ({
 }));
 
 const mockResolveBinary = vi.hoisted(() => vi.fn((_name: string) => null as string | null));
+const mockContainerManager = vi.hoisted(() => ({
+  checkDocker: vi.fn(() => true),
+  getDockerVersion: vi.fn(() => "27.0.0"),
+  listImages: vi.fn(() => ["companion-core:latest"]),
+  createContainer: vi.fn(() => ({
+    containerId: "cid-1",
+    name: "companion-cid",
+    image: "companion-core:latest",
+    portMappings: [{ containerPort: 3000, hostPort: 49152 }],
+    hostCwd: "/test",
+    containerCwd: "/workspace",
+    state: "running",
+  })),
+  retrack: vi.fn(),
+  removeContainer: vi.fn(),
+}));
+const mockBuildCloudManifest = vi.hoisted(() => vi.fn(() => ({
+  version: 1,
+  environmentId: "session-1",
+  sessionId: "session-1",
+  backend: "claude",
+  createdAt: "2026-02-13T00:00:00.000Z",
+  cwd: "/test",
+  image: "companion-core:latest",
+  container: {
+    id: "cid-1",
+    name: "companion-cid",
+    cwd: "/workspace",
+    portMappings: [{ containerPort: 3000, hostPort: 49152 }],
+  },
+  requested: { ports: [3000], volumes: [], env: [] },
+})));
+const mockWriteCloudManifest = vi.hoisted(() => vi.fn(async () => "/test/.companion/cloud/environments/session-1.json"));
+const mockBuildCloudProviderPlan = vi.hoisted(() =>
+  vi.fn(async () => ({
+    provider: "modal",
+    sessionId: "session-1",
+    image: "companion-core:latest",
+    cwd: "/test",
+    mappedPorts: [{ containerPort: 3000, hostPort: 49152 }],
+    commandPreview: "modal run companion_cloud.py --manifest /test/.companion/cloud/environments/session-1.json",
+  })),
+);
 vi.mock("./path-resolver.js", () => ({
   resolveBinary: mockResolveBinary,
+}));
+vi.mock("./container-manager.js", () => ({
+  containerManager: mockContainerManager,
+}));
+vi.mock("./cloud-env.js", () => ({
+  buildCloudEnvironmentManifest: mockBuildCloudManifest,
+  writeCloudEnvironmentManifest: mockWriteCloudManifest,
+}));
+vi.mock("./cloud-provider.js", () => ({
+  buildCloudProviderPlan: mockBuildCloudProviderPlan,
 }));
 
 vi.mock("node:fs", async (importOriginal) => {
@@ -178,6 +231,68 @@ describe("POST /api/sessions/create", () => {
     expect(launcher.launch).toHaveBeenCalledWith(
       expect.objectContaining({ model: "claude-sonnet-4-5-20250929", cwd: "/test" }),
     );
+  });
+
+  it("creates container + manifest when container config is provided (claude)", async () => {
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        backend: "claude",
+        cwd: "/test",
+        container: {
+          image: "companion-core:latest",
+          ports: [3000],
+        },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockContainerManager.createContainer).toHaveBeenCalledWith(
+      expect.any(String),
+      "/test",
+      expect.objectContaining({
+        image: "companion-core:latest",
+        ports: [3000],
+      }),
+    );
+    expect(mockContainerManager.retrack).toHaveBeenCalledWith("cid-1", "session-1");
+    expect(mockBuildCloudManifest).toHaveBeenCalled();
+    expect(mockWriteCloudManifest).toHaveBeenCalledWith(
+      "/test",
+      expect.objectContaining({ sessionId: "session-1" }),
+    );
+  });
+
+  it("supports container mode with codex backend", async () => {
+    const res = await app.request("/api/sessions/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        backend: "codex",
+        cwd: "/test",
+        container: {
+          image: "companion-core:latest",
+          ports: [5173],
+        },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockContainerManager.createContainer).toHaveBeenCalledWith(
+      expect.any(String),
+      "/test",
+      expect.objectContaining({
+        image: "companion-core:latest",
+        ports: [5173],
+      }),
+    );
+    expect(launcher.launch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backendType: "codex",
+      }),
+    );
+    expect(mockWriteCloudManifest).toHaveBeenCalled();
   });
 
   it("injects environment variables when envSlug is provided", async () => {
@@ -1441,5 +1556,36 @@ describe("GET /api/sessions/:id/usage-limits", () => {
     const json = await res.json();
     expect(json).toEqual({ five_hour: null, seven_day: null, extra_usage: null });
     expect(mockGetUsageLimits).toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/cloud/providers/:provider/plan", () => {
+  it("returns a provider plan when cwd and sessionId are provided", async () => {
+    const res = await app.request(
+      `/api/cloud/providers/modal/plan?cwd=${encodeURIComponent("/test")}&sessionId=session-1`,
+      { method: "GET" },
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual(
+      expect.objectContaining({
+        provider: "modal",
+        sessionId: "session-1",
+      }),
+    );
+    expect(mockBuildCloudProviderPlan).toHaveBeenCalledWith({
+      provider: "modal",
+      projectCwd: "/test",
+      sessionId: "session-1",
+    });
+  });
+
+  it("returns 400 when provider is unsupported", async () => {
+    const res = await app.request(
+      `/api/cloud/providers/unknown/plan?cwd=${encodeURIComponent("/test")}&sessionId=session-1`,
+      { method: "GET" },
+    );
+    expect(res.status).toBe(400);
   });
 });

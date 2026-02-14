@@ -6,6 +6,7 @@ import { disconnectSession } from "../ws.js";
 import { generateUniqueSessionName } from "../utils/names.js";
 import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
 import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
+import { normalizeImageRef, parsePortList } from "../utils/cloud-env.js";
 import type { BackendType } from "../types.js";
 import { EnvManager } from "./EnvManager.js";
 import { FolderPicker } from "./FolderPicker.js";
@@ -50,6 +51,15 @@ export function HomePage() {
   const [dynamicModels, setDynamicModels] = useState<ModelOption[] | null>(null);
   const [codexInternetAccess, setCodexInternetAccess] = useState(() =>
     localStorage.getItem("cc-codex-internet-access") === "1",
+  );
+  const [cloudEnabled, setCloudEnabled] = useState(() =>
+    localStorage.getItem("cc-cloud-enabled") === "1",
+  );
+  const [cloudImage, setCloudImage] = useState(() =>
+    localStorage.getItem("cc-cloud-image") || "companion-core:latest",
+  );
+  const [cloudPorts, setCloudPorts] = useState(() =>
+    localStorage.getItem("cc-cloud-ports") || "3000",
   );
 
   const MODELS = dynamicModels || getModelsForBackend(backend);
@@ -186,6 +196,7 @@ export function HomePage() {
 
   const selectedModel = MODELS.find((m) => m.value === model) || MODELS[0];
   const selectedMode = MODES.find((m) => m.value === mode) || MODES[0];
+  const parsedCloudPorts = parsePortList(cloudPorts);
   const logoSrc = backend === "codex" ? "/logo-codex.svg" : "/logo.svg";
   const dirLabel = cwd ? cwd.split("/").pop() || cwd : "Select folder";
 
@@ -294,6 +305,12 @@ export function HomePage() {
         useWorktree: useWorktree || undefined,
         backend,
         codexInternetAccess: backend === "codex" ? codexInternetAccess : undefined,
+        container: cloudEnabled
+          ? {
+              image: normalizeImageRef(cloudImage),
+              ports: parsedCloudPorts,
+            }
+          : undefined,
       });
       const sessionId = result.sessionId;
 
@@ -560,6 +577,26 @@ export function HomePage() {
               <span>Internet</span>
             </button>
           )}
+
+          {/* Cloud environment toggle */}
+          <button
+            onClick={() => {
+              const next = !cloudEnabled;
+              setCloudEnabled(next);
+              localStorage.setItem("cc-cloud-enabled", next ? "1" : "0");
+            }}
+            className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+              cloudEnabled
+                ? "bg-cc-primary/15 text-cc-primary font-medium"
+                : "text-cc-muted hover:text-cc-fg hover:bg-cc-hover"
+            }`}
+            title="Run this session with an isolated cloud/container environment"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 opacity-70">
+              <path d="M8 1.5l5.75 3.25v6.5L8 14.5l-5.75-3.25v-6.5L8 1.5zm0 1.72L3.75 5.6v4.8L8 12.78l4.25-2.38V5.6L8 3.22z" />
+            </svg>
+            <span>Cloud</span>
+          </button>
 
           {/* Folder selector */}
           <div>
@@ -844,6 +881,44 @@ export function HomePage() {
             )}
           </div>
         </div>
+
+        {/* Cloud options */}
+        {cloudEnabled && (
+          <div className="mt-2.5 p-2.5 rounded-[10px] border border-cc-border bg-cc-card/60">
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className="flex-1">
+                <span className="block text-[11px] text-cc-muted mb-1">Image</span>
+                <input
+                  value={cloudImage}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCloudImage(value);
+                    localStorage.setItem("cc-cloud-image", value);
+                  }}
+                  placeholder="companion-core:latest"
+                  className="w-full px-2.5 py-1.5 text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+                />
+              </label>
+              <label className="sm:w-52">
+                <span className="block text-[11px] text-cc-muted mb-1">Ports (container)</span>
+                <input
+                  value={cloudPorts}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCloudPorts(value);
+                    localStorage.setItem("cc-cloud-ports", value);
+                  }}
+                  placeholder="3000,5173"
+                  className="w-full px-2.5 py-1.5 text-xs bg-cc-input-bg border border-cc-border rounded-md text-cc-fg font-mono-code placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+                />
+              </label>
+            </div>
+            <p className="mt-2 text-[11px] text-cc-muted">
+              Host ports are assigned automatically. Parsed ports:{" "}
+              {parsedCloudPorts.length > 0 ? parsedCloudPorts.join(", ") : "none"}
+            </p>
+          </div>
+        )}
 
         {/* Branch behind remote warning */}
         {pullPrompt && (

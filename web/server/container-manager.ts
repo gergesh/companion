@@ -1,4 +1,5 @@
 import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+import { existsSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,6 +127,12 @@ export class ContainerManager {
       "-v", `${hostCwd}:/workspace`,
       "-w", "/workspace",
     ];
+
+    // Codex credentials are optional; only mount if they exist.
+    const codexHome = `${homedir}/.codex`;
+    if (existsSync(codexHome)) {
+      args.push("-v", `${codexHome}:/root/.codex:ro`);
+    }
 
     // Port mappings: -p 0:{containerPort}
     for (const port of config.ports) {

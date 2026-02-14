@@ -14,6 +14,11 @@ import * as envManager from "./env-manager.js";
 import * as gitUtils from "./git-utils.js";
 import * as sessionNames from "./session-names.js";
 import { containerManager, type ContainerConfig, type ContainerInfo } from "./container-manager.js";
+import {
+  buildCloudEnvironmentManifest,
+  writeCloudEnvironmentManifest,
+} from "./cloud-env.js";
+import { buildCloudProviderPlan, type CloudProvider } from "./cloud-provider.js";
 import { DEFAULT_OPENROUTER_MODEL, getSettings, updateSettings } from "./settings-manager.js";
 import { getUsageLimits } from "./usage-limits.js";
 import {
@@ -161,9 +166,10 @@ export function createRoutes(
 
       // If container mode requested, create and start the container
       let containerInfo: ContainerInfo | undefined;
-      if (body.container && backend === "claude") {
-        const cConfig: ContainerConfig = {
-          image: body.container.image || "companion-dev:latest",
+      let containerConfig: ContainerConfig | undefined;
+      if (body.container) {
+        containerConfig = {
+          image: body.container.image || "companion-core:latest",
           ports: Array.isArray(body.container.ports)
             ? body.container.ports.map(Number).filter((n: number) => n > 0)
             : [],
@@ -172,7 +178,7 @@ export function createRoutes(
         };
         // Use cwd-based name since we don't have sessionId yet
         const containerId = crypto.randomUUID().slice(0, 8);
-        containerInfo = containerManager.createContainer(containerId, cwd, cConfig);
+        containerInfo = containerManager.createContainer(containerId, cwd, containerConfig);
       }
 
       const session = launcher.launch({
@@ -195,6 +201,18 @@ export function createRoutes(
       if (containerInfo) {
         // The container was created with a temp ID; re-register under the real session ID
         containerManager.retrack(containerInfo.containerId, session.sessionId);
+
+        if (!containerConfig) {
+          throw new Error("Container config missing for environment manifest");
+        }
+        const manifest = buildCloudEnvironmentManifest({
+          sessionId: session.sessionId,
+          backend,
+          cwd,
+          config: containerConfig,
+          info: containerInfo,
+        });
+        await writeCloudEnvironmentManifest(cwd, manifest);
       }
 
       // Track the worktree mapping
@@ -378,6 +396,30 @@ export function createRoutes(
   api.get("/containers/images", (c) => {
     const images = containerManager.listImages();
     return c.json(images);
+  });
+
+  // ─── Cloud providers ─────────────────────────────────────────────
+
+  api.get("/cloud/providers/:provider/plan", async (c) => {
+    const provider = c.req.param("provider") as CloudProvider;
+    const cwd = c.req.query("cwd");
+    const sessionId = c.req.query("sessionId");
+    if (!cwd || !sessionId) {
+      return c.json({ error: "cwd and sessionId are required" }, 400);
+    }
+    if (provider !== "modal") {
+      return c.json({ error: `Unsupported provider: ${provider}` }, 400);
+    }
+    try {
+      const plan = await buildCloudProviderPlan({
+        provider,
+        projectCwd: resolve(cwd),
+        sessionId,
+      });
+      return c.json(plan);
+    } catch (e: unknown) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
   });
 
   // ─── Filesystem browsing ─────────────────────────────────────
