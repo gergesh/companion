@@ -426,6 +426,66 @@ export function createRoutes(
     return c.json(plugin);
   });
 
+  api.get("/plugins/:id/stats", (c) => {
+    if (!pluginManager) return c.json({ error: "Plugins unavailable" }, 503);
+    const id = c.req.param("id");
+    const stats = pluginManager.getStats(id);
+    if (!stats) return c.json({ error: "Plugin not found" }, 404);
+    return c.json(stats);
+  });
+
+  api.put("/plugins/:id/grants", async (c) => {
+    if (!pluginManager) return c.json({ error: "Plugins unavailable" }, 503);
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const grants = body && typeof body === "object" && body.grants && typeof body.grants === "object"
+      ? body.grants as Record<string, boolean>
+      : {};
+    const plugin = pluginManager.updateCapabilityGrants(id, grants);
+    if (!plugin) return c.json({ error: "Plugin not found" }, 404);
+    return c.json(plugin);
+  });
+
+  api.post("/plugins/:id/dry-run", async (c) => {
+    if (!pluginManager) return c.json({ error: "Plugins unavailable" }, 503);
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const eventRaw = body && typeof body === "object" && body.event && typeof body.event === "object"
+      ? body.event as Record<string, unknown>
+      : null;
+    if (!eventRaw) {
+      return c.json({ error: "event object is required" }, 400);
+    }
+    const name = typeof eventRaw.name === "string" ? eventRaw.name : null;
+    if (!name) {
+      return c.json({ error: "event.name is required" }, 400);
+    }
+    const data = eventRaw.data && typeof eventRaw.data === "object" ? eventRaw.data : {};
+    const metaRaw = eventRaw.meta && typeof eventRaw.meta === "object"
+      ? eventRaw.meta as Record<string, unknown>
+      : {};
+
+    const event = {
+      name,
+      meta: {
+        eventId: typeof metaRaw.eventId === "string" ? metaRaw.eventId : crypto.randomUUID(),
+        eventVersion: 2 as const,
+        timestamp: typeof metaRaw.timestamp === "number" ? metaRaw.timestamp : Date.now(),
+        source: "routes" as const,
+        sessionId: typeof metaRaw.sessionId === "string" ? metaRaw.sessionId : undefined,
+        backendType: metaRaw.backendType === "claude" || metaRaw.backendType === "codex"
+          ? metaRaw.backendType
+          : undefined,
+        correlationId: typeof metaRaw.correlationId === "string" ? metaRaw.correlationId : undefined,
+      },
+      data,
+    } as PluginEvent;
+
+    const result = await pluginManager.dryRun(id, event, body.config);
+    if (!result) return c.json({ error: "Plugin not found" }, 404);
+    return c.json(result);
+  });
+
   api.post("/sessions/:id/unarchive", (c) => {
     const id = c.req.param("id");
     launcher.setArchived(id, false);

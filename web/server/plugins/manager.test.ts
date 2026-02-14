@@ -375,6 +375,7 @@ describe("PluginManager", () => {
       blocking: true,
       defaultEnabled: true,
       defaultConfig: {},
+      capabilities: ["message:mutate"],
       onEvent: (event) => {
         if (event.name === "user.message.before_send") {
           return {
@@ -398,6 +399,7 @@ describe("PluginManager", () => {
       blocking: true,
       defaultEnabled: true,
       defaultConfig: {},
+      capabilities: ["message:mutate"],
       onEvent: (event) => {
         if (event.name !== "user.message.before_send") return;
         return {
@@ -454,5 +456,121 @@ describe("PluginManager", () => {
     });
 
     expect(res.userMessageMutation?.content).toBe("[global] hello [project]");
+  });
+
+  it("applies capability grants to block privileged outputs", async () => {
+    const gated: PluginDefinition = {
+      id: "gated-plugin",
+      name: "Gated",
+      version: "1.0.0",
+      description: "Requires capabilities",
+      events: ["permission.requested"],
+      priority: 10,
+      blocking: true,
+      defaultEnabled: true,
+      defaultConfig: {},
+      capabilities: ["permission:auto-decide"],
+      onEvent: () => ({
+        permissionDecision: { behavior: "deny", message: "blocked", pluginId: "gated-plugin" },
+      }),
+    };
+    manager.register(gated);
+    manager.updateCapabilityGrants("gated-plugin", { "permission:auto-decide": false });
+
+    const res = await manager.emit({
+      name: "permission.requested",
+      meta: {
+        eventId: "e7",
+        eventVersion: 2,
+        timestamp: Date.now(),
+        source: "ws-bridge",
+        sessionId: "s1",
+        backendType: "claude",
+      },
+      data: {
+        sessionId: "s1",
+        backendType: "claude",
+        state: {
+          session_id: "s1",
+          backend_type: "claude",
+          model: "",
+          cwd: "/tmp",
+          tools: [],
+          permissionMode: "default",
+          claude_code_version: "",
+          mcp_servers: [],
+          agents: [],
+          slash_commands: [],
+          skills: [],
+          total_cost_usd: 0,
+          num_turns: 0,
+          context_used_percent: 0,
+          is_compacting: false,
+          git_branch: "",
+          is_worktree: false,
+          repo_root: "",
+          git_ahead: 0,
+          git_behind: 0,
+          total_lines_added: 0,
+          total_lines_removed: 0,
+        },
+        permission: {
+          request_id: "r1",
+          tool_name: "Read",
+          input: { file_path: "README.md" },
+          tool_use_id: "t1",
+          timestamp: Date.now(),
+        },
+        permissionMode: "default",
+        requestHash: "hash-1",
+        toolInputNormalized: { filePath: "README.md" },
+      },
+    });
+
+    expect(res.permissionDecision).toBeUndefined();
+    expect(res.insights.some((i) => i.title === "Capability blocked")).toBe(true);
+  });
+
+  it("supports dry-run execution for a single plugin", async () => {
+    const result = await manager.dryRun("notifications", {
+      name: "session.created",
+      meta: {
+        eventId: "e8",
+        eventVersion: 2,
+        timestamp: Date.now(),
+        source: "routes",
+        sessionId: "s1",
+        backendType: "claude",
+      },
+      data: {
+        session: {
+          session_id: "s1",
+          backend_type: "claude",
+          model: "",
+          cwd: "/tmp",
+          tools: [],
+          permissionMode: "default",
+          claude_code_version: "",
+          mcp_servers: [],
+          agents: [],
+          slash_commands: [],
+          skills: [],
+          total_cost_usd: 0,
+          num_turns: 0,
+          context_used_percent: 0,
+          is_compacting: false,
+          git_branch: "",
+          is_worktree: false,
+          repo_root: "",
+          git_ahead: 0,
+          git_behind: 0,
+          total_lines_added: 0,
+          total_lines_removed: 0,
+        },
+      },
+    });
+
+    expect(result?.pluginId).toBe("notifications");
+    expect(result?.result.aborted).toBe(false);
   });
 });

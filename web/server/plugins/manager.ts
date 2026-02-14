@@ -1,9 +1,12 @@
 import type {
   PermissionAutomationDecision,
+  PluginCapability,
   PluginDefinition,
   PluginEvent,
   PluginEventResult,
+  PluginHealth,
   PluginRuntimeInfo,
+  PluginStats,
 } from "./types.js";
 import { PluginStateStore } from "./state-store.js";
 import { getBuiltinPlugins } from "./builtins.js";
@@ -15,11 +18,25 @@ export interface EmitResult {
   aborted: boolean;
 }
 
+export interface PluginDryRunResult {
+  pluginId: string;
+  applied: boolean;
+  blockedByCapabilities: PluginCapability[];
+  result: EmitResult;
+}
+
 interface EmitOptions {
   onInsight?: (insight: EmitResult["insights"][number]) => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 3000;
+
+class PluginTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Plugin timeout after ${timeoutMs}ms`);
+    this.name = "PluginTimeoutError";
+  }
+}
 
 export class PluginConfigValidationError extends Error {
   pluginId: string;
@@ -47,7 +64,7 @@ function toPluginErrorInsight(pluginId: string, event: PluginEvent, err: unknown
 function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`Plugin timeout after ${timeoutMs}ms`));
+      reject(new PluginTimeoutError(timeoutMs));
     }, timeoutMs);
 
     promise
@@ -62,10 +79,33 @@ function runWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   });
 }
 
+function createEmptyStats(): PluginStats {
+  return {
+    invocations: 0,
+    successes: 0,
+    errors: 0,
+    timeouts: 0,
+    aborted: 0,
+    lastDurationMs: 0,
+    avgDurationMs: 0,
+    p95DurationMs: 0,
+  };
+}
+
+function createDefaultHealth(enabled: boolean): PluginHealth {
+  return {
+    status: enabled ? "healthy" : "disabled",
+    updatedAt: Date.now(),
+  };
+}
+
 export class PluginManager {
   private definitions = new Map<string, PluginDefinition<any>>();
   private stateStore: PluginStateStore;
   private warnedInvalidConfig = new Set<string>();
+  private stats = new Map<string, PluginStats>();
+  private health = new Map<string, PluginHealth>();
+  private durationWindows = new Map<string, number[]>();
 
   constructor(stateStore?: PluginStateStore) {
     this.stateStore = stateStore || new PluginStateStore();
@@ -76,6 +116,8 @@ export class PluginManager {
 
   register(plugin: PluginDefinition<any>): void {
     this.definitions.set(plugin.id, plugin);
+    if (!this.stats.has(plugin.id)) this.stats.set(plugin.id, createEmptyStats());
+    if (!this.health.has(plugin.id)) this.health.set(plugin.id, createDefaultHealth(plugin.defaultEnabled));
   }
 
   private resolveConfig(
@@ -101,12 +143,151 @@ export class PluginManager {
     }
   }
 
+  private getRequestedCapabilities(plugin: PluginDefinition<any>): PluginCapability[] {
+    return plugin.capabilities ? [...plugin.capabilities] : [];
+  }
+
+  private resolveCapabilityGrants(plugin: PluginDefinition<any>, state = this.stateStore.getState()): Record<PluginCapability, boolean> {
+    const requested = this.getRequestedCapabilities(plugin);
+    const grants = state.grants?.[plugin.id] || {};
+    const out: Record<PluginCapability, boolean> = {} as Record<PluginCapability, boolean>;
+    for (const cap of requested) {
+      // Backward-compatible default: granted unless explicitly revoked.
+      out[cap] = grants[cap] !== false;
+    }
+    return out;
+  }
+
+  private getGrantedCapabilities(plugin: PluginDefinition<any>, state = this.stateStore.getState()): PluginCapability[] {
+    const grants = this.resolveCapabilityGrants(plugin, state);
+    return this.getRequestedCapabilities(plugin).filter((cap) => grants[cap]);
+  }
+
+  private sanitizeResultForCapabilities(
+    plugin: PluginDefinition<any>,
+    result: PluginEventResult,
+    grants: Record<PluginCapability, boolean>,
+  ): { sanitized: PluginEventResult; blocked: PluginCapability[] } {
+    const blocked: PluginCapability[] = [];
+    const sanitized: PluginEventResult = { ...result };
+
+    if (result.permissionDecision && !grants["permission:auto-decide"]) {
+      sanitized.permissionDecision = undefined;
+      blocked.push("permission:auto-decide");
+    }
+
+    if (result.userMessageMutation && !grants["message:mutate"]) {
+      sanitized.userMessageMutation = undefined;
+      blocked.push("message:mutate");
+    }
+
+    if (result.eventDataPatch && !grants["event:patch"]) {
+      sanitized.eventDataPatch = undefined;
+      blocked.push("event:patch");
+    }
+
+    if (result.insights?.length) {
+      sanitized.insights = result.insights.map((insight) => {
+        const next = { ...insight };
+        if (next.toast && !grants["insight:toast"]) {
+          next.toast = false;
+          if (!blocked.includes("insight:toast")) blocked.push("insight:toast");
+        }
+        if (next.sound && !grants["insight:sound"]) {
+          next.sound = false;
+          if (!blocked.includes("insight:sound")) blocked.push("insight:sound");
+        }
+        if (next.desktop && !grants["insight:desktop"]) {
+          next.desktop = false;
+          if (!blocked.includes("insight:desktop")) blocked.push("insight:desktop");
+        }
+        return next;
+      });
+    }
+
+    if (blocked.length > 0) {
+      sanitized.insights = [
+        ...(sanitized.insights || []),
+        {
+          id: `${plugin.id}-${Date.now()}-capability-blocked`,
+          plugin_id: plugin.id,
+          title: "Capability blocked",
+          message: `Blocked by capability grants: ${blocked.join(", ")}`,
+          level: "warning",
+          timestamp: Date.now(),
+        },
+      ];
+    }
+
+    return { sanitized, blocked };
+  }
+
+  private updateStatsOnRun(pluginId: string, durationMs: number, outcome: "success" | "error" | "timeout" | "aborted", error?: string): void {
+    const prev = this.stats.get(pluginId) || createEmptyStats();
+    const next: PluginStats = {
+      ...prev,
+      invocations: prev.invocations + 1,
+      lastDurationMs: durationMs,
+      lastInvokedAt: Date.now(),
+    };
+
+    if (outcome === "success") next.successes += 1;
+    if (outcome === "error") next.errors += 1;
+    if (outcome === "timeout") next.timeouts += 1;
+    if (outcome === "aborted") next.aborted += 1;
+    if (error) next.lastError = error;
+
+    const win = [...(this.durationWindows.get(pluginId) || []), durationMs];
+    if (win.length > 100) win.splice(0, win.length - 100);
+    this.durationWindows.set(pluginId, win);
+
+    const sum = win.reduce((acc, v) => acc + v, 0);
+    next.avgDurationMs = win.length > 0 ? Math.round(sum / win.length) : 0;
+
+    const sorted = [...win].sort((a, b) => a - b);
+    if (sorted.length > 0) {
+      const idx = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1);
+      next.p95DurationMs = sorted[Math.max(0, idx)] || 0;
+    }
+
+    this.stats.set(pluginId, next);
+
+    const degraded = next.errors + next.timeouts >= 3 && next.invocations > 0;
+    this.health.set(pluginId, {
+      status: degraded ? "degraded" : "healthy",
+      reason: degraded ? "High recent error rate" : undefined,
+      updatedAt: Date.now(),
+    });
+  }
+
+  private updateHealthFromEnabled(pluginId: string, enabled: boolean): void {
+    if (!enabled) {
+      this.health.set(pluginId, {
+        status: "disabled",
+        reason: "Plugin disabled",
+        updatedAt: Date.now(),
+      });
+      return;
+    }
+
+    const existing = this.health.get(pluginId);
+    if (!existing || existing.status === "disabled") {
+      this.health.set(pluginId, {
+        status: "healthy",
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
   list(): PluginRuntimeInfo[] {
     const state = this.stateStore.getState();
     return Array.from(this.definitions.values()).map((plugin) => {
       const savedEnabled = state.enabled[plugin.id];
       const enabled = typeof savedEnabled === "boolean" ? savedEnabled : plugin.defaultEnabled;
       const config = this.resolveConfig(plugin, state.config[plugin.id], { persistDefaultOnInvalid: true });
+      const requested = this.getRequestedCapabilities(plugin);
+      const granted = this.getGrantedCapabilities(plugin, state);
+      this.updateHealthFromEnabled(plugin.id, enabled);
 
       return {
         id: plugin.id,
@@ -120,8 +301,19 @@ export class PluginManager {
         failPolicy: plugin.failPolicy ?? "continue",
         enabled,
         config,
+        capabilitiesRequested: requested,
+        capabilitiesGranted: granted,
+        riskLevel: plugin.riskLevel ?? "low",
+        apiVersion: plugin.apiVersion ?? 1,
+        health: this.health.get(plugin.id) || createDefaultHealth(enabled),
+        stats: this.stats.get(plugin.id) || createEmptyStats(),
       };
     });
+  }
+
+  getStats(id: string): PluginStats | null {
+    if (!this.definitions.has(id)) return null;
+    return this.stats.get(id) || createEmptyStats();
   }
 
   setEnabled(id: string, enabled: boolean): PluginRuntimeInfo | null {
@@ -131,6 +323,7 @@ export class PluginManager {
     this.stateStore.update((draft) => {
       draft.enabled[id] = enabled;
     });
+    this.updateHealthFromEnabled(id, enabled);
 
     return this.list().find((row) => row.id === id) || null;
   }
@@ -155,6 +348,85 @@ export class PluginManager {
     return this.list().find((row) => row.id === id) || null;
   }
 
+  updateCapabilityGrants(
+    id: string,
+    grants: Record<string, boolean>,
+  ): PluginRuntimeInfo | null {
+    const plugin = this.definitions.get(id);
+    if (!plugin) return null;
+
+    const requested = this.getRequestedCapabilities(plugin);
+    this.stateStore.update((draft) => {
+      const current = { ...(draft.grants[id] || {}) } as Record<PluginCapability, boolean>;
+      for (const cap of requested) {
+        if (typeof grants[cap] === "boolean") {
+          current[cap] = grants[cap];
+        }
+      }
+      draft.grants[id] = current;
+    });
+
+    return this.list().find((row) => row.id === id) || null;
+  }
+
+  private async executePlugin(
+    plugin: PluginDefinition<any>,
+    event: PluginEvent,
+    stateConfig: unknown,
+  ): Promise<{ result?: PluginEventResult; error?: unknown; blockedCapabilities: PluginCapability[]; durationMs: number }> {
+    const config = this.resolveConfig(plugin, stateConfig, { persistDefaultOnInvalid: true });
+    const timeoutMs = plugin.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const state = this.stateStore.getState();
+    const grants = this.resolveCapabilityGrants(plugin, state);
+
+    const startedAt = Date.now();
+    try {
+      const raw = await runWithTimeout(Promise.resolve(plugin.onEvent(event, config)), timeoutMs);
+      const durationMs = Date.now() - startedAt;
+      if (!raw) {
+        return { result: undefined, blockedCapabilities: [], durationMs };
+      }
+      const { sanitized, blocked } = this.sanitizeResultForCapabilities(plugin, raw, grants);
+      return { result: sanitized, blockedCapabilities: blocked, durationMs };
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      return { error, blockedCapabilities: [], durationMs };
+    }
+  }
+
+  async dryRun(pluginId: string, event: PluginEvent, rawConfig?: unknown): Promise<PluginDryRunResult | null> {
+    const plugin = this.definitions.get(pluginId);
+    if (!plugin) return null;
+
+    const exec = await this.executePlugin(plugin, event, rawConfig);
+    if (exec.error) {
+      const isTimeout = exec.error instanceof PluginTimeoutError;
+      this.updateStatsOnRun(pluginId, exec.durationMs, isTimeout ? "timeout" : "error", exec.error instanceof Error ? exec.error.message : String(exec.error));
+      return {
+        pluginId,
+        applied: false,
+        blockedByCapabilities: [],
+        result: {
+          insights: [toPluginErrorInsight(pluginId, event, exec.error)],
+          aborted: false,
+        },
+      };
+    }
+
+    this.updateStatsOnRun(pluginId, exec.durationMs, "success");
+    return {
+      pluginId,
+      applied: !!exec.result,
+      blockedByCapabilities: exec.blockedCapabilities,
+      result: {
+        insights: exec.result?.insights || [],
+        permissionDecision: exec.result?.permissionDecision,
+        userMessageMutation: exec.result?.userMessageMutation,
+        aborted: false,
+      },
+    };
+  }
+
   async emit(event: PluginEvent, options: EmitOptions = {}): Promise<EmitResult> {
     const state = this.stateStore.getState();
     const insights: EmitResult["insights"] = [];
@@ -170,40 +442,51 @@ export class PluginManager {
     for (const plugin of candidates) {
       const savedEnabled = state.enabled[plugin.id];
       const enabled = typeof savedEnabled === "boolean" ? savedEnabled : plugin.defaultEnabled;
+      this.updateHealthFromEnabled(plugin.id, enabled);
       if (!enabled) continue;
 
-      const config = this.resolveConfig(plugin, state.config[plugin.id], { persistDefaultOnInvalid: true });
-      const timeoutMs = plugin.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-      const failPolicy = plugin.failPolicy ?? "continue";
-      const run = () => runWithTimeout(Promise.resolve(plugin.onEvent(mutableEvent, config)), timeoutMs);
-
       if (!plugin.blocking) {
-        run()
-          .then((result) => {
-            if (!result?.insights?.length) return;
-            for (const insight of result.insights) {
+        void this.executePlugin(plugin, mutableEvent, state.config[plugin.id])
+          .then((exec) => {
+            if (exec.error) {
+              const isTimeout = exec.error instanceof PluginTimeoutError;
+              this.updateStatsOnRun(plugin.id, exec.durationMs, isTimeout ? "timeout" : "error", exec.error instanceof Error ? exec.error.message : String(exec.error));
+              options.onInsight?.(toPluginErrorInsight(plugin.id, event, exec.error));
+              return;
+            }
+            this.updateStatsOnRun(plugin.id, exec.durationMs, "success");
+            if (!exec.result?.insights?.length) return;
+            for (const insight of exec.result.insights) {
               options.onInsight?.(insight);
             }
           })
           .catch((err) => {
+            this.updateStatsOnRun(plugin.id, 0, "error", err instanceof Error ? err.message : String(err));
             options.onInsight?.(toPluginErrorInsight(plugin.id, event, err));
           });
         continue;
       }
 
-      let result: PluginEventResult | void;
-      try {
-        result = await run();
-      } catch (err) {
-        insights.push(toPluginErrorInsight(plugin.id, event, err));
+      const failPolicy = plugin.failPolicy ?? "continue";
+      const exec = await this.executePlugin(plugin, mutableEvent, state.config[plugin.id]);
+
+      if (exec.error) {
+        const isTimeout = exec.error instanceof PluginTimeoutError;
+        this.updateStatsOnRun(plugin.id, exec.durationMs, isTimeout ? "timeout" : "error", exec.error instanceof Error ? exec.error.message : String(exec.error));
+        insights.push(toPluginErrorInsight(plugin.id, event, exec.error));
         if (failPolicy === "abort_current_action") {
           aborted = true;
+          const prev = this.stats.get(plugin.id) || createEmptyStats();
+          this.stats.set(plugin.id, { ...prev, aborted: prev.aborted + 1 });
           break;
         }
         continue;
       }
 
+      this.updateStatsOnRun(plugin.id, exec.durationMs, "success");
+      const result = exec.result;
       if (!result) continue;
+
       if (result.eventDataPatch && mutableEvent.data && typeof mutableEvent.data === "object") {
         mutableEvent = {
           ...mutableEvent,

@@ -116,6 +116,7 @@ export const notificationsPlugin: PluginDefinition<NotificationsPluginConfig> = 
   id: "notifications",
   name: "Session Notifications",
   version: "2.0.0",
+  apiVersion: 2,
   description: "Generates plugin notifications for session and execution events.",
   events: [
     "session.created",
@@ -132,6 +133,8 @@ export const notificationsPlugin: PluginDefinition<NotificationsPluginConfig> = 
   blocking: true,
   timeoutMs: 1000,
   failPolicy: "continue",
+  capabilities: ["insight:toast", "insight:sound", "insight:desktop"],
+  riskLevel: "low",
   defaultEnabled: true,
   defaultConfig: {
     onSessionCreated: false,
@@ -259,12 +262,15 @@ export const permissionAutomationPlugin: PluginDefinition<PermissionAutomationPl
   id: "permission-automation",
   name: "Permission Automation",
   version: "2.0.0",
+  apiVersion: 2,
   description: "Automates allow/deny permissions with explicit rules.",
   events: ["permission.requested"],
   priority: 1000,
   blocking: true,
   timeoutMs: 500,
   failPolicy: "abort_current_action",
+  capabilities: ["permission:auto-decide", "insight:toast"],
+  riskLevel: "high",
   defaultEnabled: false,
   defaultConfig: {
     rules: [],

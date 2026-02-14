@@ -9,14 +9,16 @@ const EMPTY_STATE: PluginStateFile = {
   updatedAt: 0,
   enabled: {},
   config: {},
+  grants: {},
 };
 
 function freshEmptyState(): PluginStateFile {
-  return {
-    updatedAt: EMPTY_STATE.updatedAt,
-    enabled: {},
-    config: {},
-  };
+    return {
+      updatedAt: EMPTY_STATE.updatedAt,
+      enabled: {},
+      config: {},
+      grants: {},
+    };
 }
 
 export class PluginStateStore {
@@ -42,6 +44,9 @@ export class PluginStateStore {
         updatedAt: typeof raw.updatedAt === "number" ? raw.updatedAt : 0,
         enabled: raw.enabled && typeof raw.enabled === "object" ? raw.enabled as Record<string, boolean> : {},
         config: raw.config && typeof raw.config === "object" ? raw.config as Record<string, unknown> : {},
+        grants: raw.grants && typeof raw.grants === "object"
+          ? raw.grants as PluginStateFile["grants"]
+          : {},
       };
     } catch {
       this.state = freshEmptyState();
@@ -56,6 +61,7 @@ export class PluginStateStore {
       updatedAt: this.state.updatedAt,
       enabled: { ...this.state.enabled },
       config: { ...this.state.config },
+      grants: { ...this.state.grants },
     };
   }
 

@@ -31,6 +31,7 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [draftById, setDraftById] = useState<Map<string, string>>(new Map());
+  const [dryRunById, setDryRunById] = useState<Map<string, string>>(new Map());
 
   async function refreshPlugins(options?: { preserveDrafts?: boolean }) {
     const list = await api.listPlugins();
@@ -97,6 +98,71 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
     }
   }
 
+  async function updateGrant(plugin: PluginRuntimeInfo, capability: string, granted: boolean) {
+    setSavingId(plugin.id);
+    setError("");
+    try {
+      await api.updatePluginGrants(plugin.id, { [capability]: granted });
+      await refreshPlugins({ preserveDrafts: true });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function dryRun(plugin: PluginRuntimeInfo) {
+    setSavingId(plugin.id);
+    setError("");
+    try {
+      const event = {
+        name: "session.created",
+        meta: { source: "routes", eventVersion: 2, timestamp: Date.now() },
+        data: {
+          session: {
+            session_id: "dry-run-session",
+            backend_type: "claude",
+            model: "",
+            cwd: "/tmp",
+            tools: [],
+            permissionMode: "default",
+            claude_code_version: "",
+            mcp_servers: [],
+            agents: [],
+            slash_commands: [],
+            skills: [],
+            total_cost_usd: 0,
+            num_turns: 0,
+            context_used_percent: 0,
+            is_compacting: false,
+            git_branch: "",
+            is_worktree: false,
+            repo_root: "",
+            git_ahead: 0,
+            git_behind: 0,
+            total_lines_added: 0,
+            total_lines_removed: 0,
+          },
+        },
+      };
+      const result = await api.dryRunPlugin(plugin.id, event);
+      const summary = result.result.insights[0]?.message
+        || result.result.permissionDecision?.message
+        || result.result.userMessageMutation?.message
+        || (result.applied ? "Dry-run applied with no visible output." : "Dry-run produced no output.");
+      setDryRunById((prev) => {
+        const next = new Map(prev);
+        next.set(plugin.id, summary);
+        return next;
+      });
+      await refreshPlugins({ preserveDrafts: true });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   return (
     <div className={`${embedded ? "h-full" : "h-[100dvh]"} bg-cc-bg text-cc-fg font-sans-ui antialiased overflow-y-auto`}>
       <div className="max-w-5xl mx-auto px-4 sm:px-8 py-6 sm:py-10 space-y-4">
@@ -135,6 +201,9 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
                 </p>
                 <p className="text-[11px] text-cc-muted mt-1">
                   timeout: {plugin.timeoutMs}ms · fail policy: {plugin.failPolicy}
+                </p>
+                <p className="text-[11px] text-cc-muted mt-1">
+                  api: v{plugin.apiVersion} · risk: {plugin.riskLevel} · health: {plugin.health.status}
                 </p>
               </div>
               <button
@@ -181,6 +250,33 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
 
             <div>
               <p className="text-[11px] text-cc-muted mb-1">Events: {plugin.events.join(", ")}</p>
+              <p className="text-[11px] text-cc-muted mb-1">
+                Stats: invocations {plugin.stats.invocations} · p95 {plugin.stats.p95DurationMs}ms · errors {plugin.stats.errors} · timeouts {plugin.stats.timeouts}
+              </p>
+              {plugin.capabilitiesRequested.length > 0 && (
+                <div className="mb-3 p-2.5 rounded-lg border border-cc-border bg-cc-hover/30">
+                  <p className="text-[11px] text-cc-muted mb-2">Capabilities</p>
+                  <div className="flex flex-wrap gap-2">
+                    {plugin.capabilitiesRequested.map((cap) => {
+                      const granted = plugin.capabilitiesGranted.includes(cap);
+                      return (
+                        <button
+                          key={cap}
+                          onClick={() => updateGrant(plugin, cap, !granted)}
+                          disabled={savingId === plugin.id}
+                          className={`px-2 py-1 rounded text-[11px] border transition-colors cursor-pointer ${
+                            granted
+                              ? "border-cc-success/50 bg-cc-success/10 text-cc-success"
+                              : "border-cc-border bg-cc-card text-cc-muted hover:text-cc-fg"
+                          }`}
+                        >
+                          {granted ? "Granted" : "Revoked"} · {cap}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {customConfigRenderers[plugin.id] ? (
                 (() => {
                   const CustomRenderer = customConfigRenderers[plugin.id];
@@ -203,6 +299,13 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
                   />
                   <div className="flex justify-end mt-3">
                     <button
+                      onClick={() => dryRun(plugin)}
+                      disabled={savingId === plugin.id}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium mr-2 bg-cc-hover text-cc-fg hover:bg-cc-border transition-colors cursor-pointer disabled:opacity-60"
+                    >
+                      Dry run
+                    </button>
+                    <button
                       onClick={() => saveConfig(plugin)}
                       disabled={savingId === plugin.id}
                       className="px-3 py-1.5 rounded-lg text-xs font-medium bg-cc-primary hover:bg-cc-primary-hover text-white transition-colors cursor-pointer disabled:bg-cc-hover disabled:text-cc-muted disabled:cursor-not-allowed"
@@ -210,6 +313,9 @@ export function PluginsPage({ embedded = false }: PluginsPageProps) {
                       Save config
                     </button>
                   </div>
+                  {dryRunById.get(plugin.id) && (
+                    <p className="mt-2 text-[11px] text-cc-muted">{dryRunById.get(plugin.id)}</p>
+                  )}
                 </>
               )}
             </div>

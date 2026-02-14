@@ -176,6 +176,16 @@ export type PluginFailPolicy = "continue" | "abort_current_action";
 
 export type PluginEventSubscription = PluginEventName | "*";
 
+export type PluginCapability =
+  | "permission:auto-decide"
+  | "message:mutate"
+  | "event:patch"
+  | "insight:toast"
+  | "insight:sound"
+  | "insight:desktop";
+
+export type PluginRiskLevel = "low" | "medium" | "high";
+
 export interface PluginDefinition<TConfig = unknown> {
   id: string;
   name: string;
@@ -188,8 +198,30 @@ export interface PluginDefinition<TConfig = unknown> {
   failPolicy?: PluginFailPolicy;
   defaultEnabled: boolean;
   defaultConfig: TConfig;
+  capabilities?: PluginCapability[];
+  riskLevel?: PluginRiskLevel;
+  apiVersion?: 1 | 2;
   validateConfig?: (input: unknown) => TConfig;
   onEvent: (event: PluginEvent, config: TConfig) => Promise<PluginEventResult | void> | PluginEventResult | void;
+}
+
+export interface PluginStats {
+  invocations: number;
+  successes: number;
+  errors: number;
+  timeouts: number;
+  aborted: number;
+  lastDurationMs: number;
+  avgDurationMs: number;
+  p95DurationMs: number;
+  lastError?: string;
+  lastInvokedAt?: number;
+}
+
+export interface PluginHealth {
+  status: "healthy" | "degraded" | "disabled";
+  reason?: string;
+  updatedAt: number;
 }
 
 export interface PluginRuntimeInfo {
@@ -204,10 +236,17 @@ export interface PluginRuntimeInfo {
   failPolicy: PluginFailPolicy;
   enabled: boolean;
   config: unknown;
+  capabilitiesRequested: PluginCapability[];
+  capabilitiesGranted: PluginCapability[];
+  riskLevel: PluginRiskLevel;
+  apiVersion: 1 | 2;
+  health: PluginHealth;
+  stats: PluginStats;
 }
 
 export interface PluginStateFile {
   updatedAt: number;
   enabled: Record<string, boolean>;
   config: Record<string, unknown>;
+  grants: Record<string, Record<PluginCapability, boolean>>;
 }

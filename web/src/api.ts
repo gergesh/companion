@@ -305,6 +305,41 @@ export interface PluginRuntimeInfo {
   failPolicy: "continue" | "abort_current_action";
   enabled: boolean;
   config: unknown;
+  capabilitiesRequested: string[];
+  capabilitiesGranted: string[];
+  riskLevel: "low" | "medium" | "high";
+  apiVersion: 1 | 2;
+  health: {
+    status: "healthy" | "degraded" | "disabled";
+    reason?: string;
+    updatedAt: number;
+  };
+  stats: PluginStats;
+}
+
+export interface PluginStats {
+  invocations: number;
+  successes: number;
+  errors: number;
+  timeouts: number;
+  aborted: number;
+  lastDurationMs: number;
+  avgDurationMs: number;
+  p95DurationMs: number;
+  lastError?: string;
+  lastInvokedAt?: number;
+}
+
+export interface PluginDryRunResult {
+  pluginId: string;
+  applied: boolean;
+  blockedByCapabilities: string[];
+  result: {
+    insights: Array<{ id: string; plugin_id: string; title: string; message: string; level: "info" | "success" | "warning" | "error"; timestamp: number }>;
+    permissionDecision?: { behavior: "allow" | "deny"; message?: string };
+    userMessageMutation?: { content?: string; blocked?: boolean; message?: string };
+    aborted: boolean;
+  };
 }
 
 export interface GitHubPRInfo {
@@ -389,6 +424,12 @@ export const api = {
     post<PluginRuntimeInfo>(`/plugins/${encodeURIComponent(id)}/disable`),
   updatePluginConfig: (id: string, config: unknown) =>
     put<PluginRuntimeInfo>(`/plugins/${encodeURIComponent(id)}/config`, { config }),
+  updatePluginGrants: (id: string, grants: Record<string, boolean>) =>
+    put<PluginRuntimeInfo>(`/plugins/${encodeURIComponent(id)}/grants`, { grants }),
+  getPluginStats: (id: string) =>
+    get<PluginStats>(`/plugins/${encodeURIComponent(id)}/stats`),
+  dryRunPlugin: (id: string, event: unknown, config?: unknown) =>
+    post<PluginDryRunResult>(`/plugins/${encodeURIComponent(id)}/dry-run`, { event, config }),
 
   // Git operations
   getRepoInfo: (path: string) =>

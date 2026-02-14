@@ -7,6 +7,8 @@ const apiMock = vi.hoisted(() => ({
   enablePlugin: vi.fn(),
   disablePlugin: vi.fn(),
   updatePluginConfig: vi.fn(),
+  updatePluginGrants: vi.fn(),
+  dryRunPlugin: vi.fn(),
 }));
 
 vi.mock("../api.js", () => ({
@@ -15,6 +17,24 @@ vi.mock("../api.js", () => ({
 
 import { PluginsPage } from "./PluginsPage.js";
 import { useStore } from "../store.js";
+
+const basePluginMeta = {
+  capabilitiesRequested: [],
+  capabilitiesGranted: [],
+  riskLevel: "low" as const,
+  apiVersion: 2 as const,
+  health: { status: "healthy" as const, updatedAt: Date.now() },
+  stats: {
+    invocations: 0,
+    successes: 0,
+    errors: 0,
+    timeouts: 0,
+    aborted: 0,
+    lastDurationMs: 0,
+    avgDurationMs: 0,
+    p95DurationMs: 0,
+  },
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -32,6 +52,7 @@ beforeEach(() => {
       failPolicy: "continue",
       enabled: true,
       config: { onResultError: true },
+      ...basePluginMeta,
     },
   ]);
   apiMock.disablePlugin.mockResolvedValue({
@@ -46,6 +67,7 @@ beforeEach(() => {
     failPolicy: "continue",
     enabled: false,
     config: { onResultError: true },
+    ...basePluginMeta,
   });
   apiMock.enablePlugin.mockResolvedValue({
     id: "notifications",
@@ -59,6 +81,7 @@ beforeEach(() => {
     failPolicy: "continue",
     enabled: true,
     config: { onResultError: true },
+    ...basePluginMeta,
   });
   apiMock.updatePluginConfig.mockResolvedValue({
     id: "notifications",
@@ -72,7 +95,10 @@ beforeEach(() => {
     failPolicy: "continue",
     enabled: true,
     config: { onResultError: false },
+    ...basePluginMeta,
   });
+  apiMock.updatePluginGrants.mockResolvedValue({});
+  apiMock.dryRunPlugin.mockResolvedValue({ applied: false, result: { insights: [], aborted: false } });
 });
 
 describe("PluginsPage", () => {
@@ -117,6 +143,7 @@ describe("PluginsPage", () => {
           failPolicy: "continue",
           enabled: true,
           config: { onResultError: true },
+          ...basePluginMeta,
         },
         {
           id: "permission-automation",
@@ -130,6 +157,7 @@ describe("PluginsPage", () => {
           failPolicy: "abort_current_action",
           enabled: true,
           config: { rules: [] },
+          ...basePluginMeta,
         },
       ])
       .mockResolvedValueOnce([
@@ -145,6 +173,7 @@ describe("PluginsPage", () => {
           failPolicy: "continue",
           enabled: true,
           config: { onResultError: true },
+          ...basePluginMeta,
         },
         {
           id: "permission-automation",
@@ -158,6 +187,7 @@ describe("PluginsPage", () => {
           failPolicy: "abort_current_action",
           enabled: false,
           config: { rules: [] },
+          ...basePluginMeta,
         },
       ]);
     apiMock.disablePlugin.mockResolvedValueOnce({
@@ -172,6 +202,7 @@ describe("PluginsPage", () => {
       failPolicy: "abort_current_action",
       enabled: false,
       config: { rules: [] },
+      ...basePluginMeta,
     });
 
     render(<PluginsPage embedded />);

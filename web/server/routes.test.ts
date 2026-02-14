@@ -541,6 +541,67 @@ describe("Plugin routes", () => {
     const json = await res.json();
     expect(json).toEqual({ error: "Plugin not found" });
   });
+
+  it("PUT /api/plugins/:id/grants updates capability grants", async () => {
+    const pluginManager = {
+      list: vi.fn(() => []),
+      setEnabled: vi.fn(),
+      updateConfig: vi.fn(),
+      updateCapabilityGrants: vi.fn(() => ({ id: "notifications", capabilitiesGranted: ["insight:toast"] })),
+    } as any;
+    const pluginApp = new Hono();
+    const terminalManager = { getInfo: () => null, spawn: () => "", kill: () => {} } as any;
+    pluginApp.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager, undefined, pluginManager));
+
+    const res = await pluginApp.request("/api/plugins/notifications/grants", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grants: { "insight:toast": true } }),
+    });
+    expect(res.status).toBe(200);
+    expect(pluginManager.updateCapabilityGrants).toHaveBeenCalledWith("notifications", { "insight:toast": true });
+  });
+
+  it("GET /api/plugins/:id/stats returns plugin stats", async () => {
+    const pluginManager = {
+      list: vi.fn(() => []),
+      setEnabled: vi.fn(),
+      updateConfig: vi.fn(),
+      getStats: vi.fn(() => ({ invocations: 3, errors: 0 })),
+    } as any;
+    const pluginApp = new Hono();
+    const terminalManager = { getInfo: () => null, spawn: () => "", kill: () => {} } as any;
+    pluginApp.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager, undefined, pluginManager));
+
+    const res = await pluginApp.request("/api/plugins/notifications/stats");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ invocations: 3, errors: 0 });
+  });
+
+  it("POST /api/plugins/:id/dry-run returns dry-run result", async () => {
+    const pluginManager = {
+      list: vi.fn(() => []),
+      setEnabled: vi.fn(),
+      updateConfig: vi.fn(),
+      dryRun: vi.fn(async () => ({ pluginId: "notifications", applied: true, blockedByCapabilities: [], result: { insights: [], aborted: false } })),
+    } as any;
+    const pluginApp = new Hono();
+    const terminalManager = { getInfo: () => null, spawn: () => "", kill: () => {} } as any;
+    pluginApp.route("/api", createRoutes(launcher, bridge, sessionStore, tracker, terminalManager, undefined, pluginManager));
+
+    const res = await pluginApp.request("/api/plugins/notifications/dry-run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: {
+          name: "session.created",
+          data: { session: { session_id: "s1" } },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(pluginManager.dryRun).toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/sessions", () => {

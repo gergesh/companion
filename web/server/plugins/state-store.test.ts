@@ -46,4 +46,21 @@ describe("PluginStateStore", () => {
 
     expect(stateB.config).toEqual({});
   });
+
+  it("does not leak capability grants between fresh store instances", () => {
+    // Grants are per-installation and must not be shared across unrelated store files.
+    const dirA = mkdtempSync(join(tmpdir(), "plugin-state-e-"));
+    const dirB = mkdtempSync(join(tmpdir(), "plugin-state-f-"));
+    testDirs.push(dirA, dirB);
+
+    const storeA = new PluginStateStore(join(dirA, "plugins.json"));
+    storeA.update((draft) => {
+      draft.grants.notifications = { "insight:toast": false } as any;
+    });
+
+    const storeB = new PluginStateStore(join(dirB, "plugins.json"));
+    const stateB = storeB.getState();
+
+    expect(stateB.grants).toEqual({});
+  });
 });
