@@ -973,12 +973,14 @@ export class WsBridge {
       // Store user messages in history for replay with stable ID for dedup on reconnect
       if (msg.type === "user_message") {
         const ts = Date.now();
-        session.messageHistory.push({
+        const userBrowserMsg: BrowserIncomingMessage = {
           type: "user_message",
           content: msg.content,
           timestamp: ts,
           id: `user-${ts}-${this.userMsgCounter++}`,
-        });
+        };
+        session.messageHistory.push(userBrowserMsg);
+        this.broadcastToBrowsers(session, userBrowserMsg);
         this.persistSession(session);
       }
       if (msg.type === "permission_response") {
@@ -1118,12 +1120,16 @@ export class WsBridge {
   ) {
     // Store user message in history for replay with stable ID for dedup on reconnect
     const ts = Date.now();
-    session.messageHistory.push({
+    const userBrowserMsg: BrowserIncomingMessage = {
       type: "user_message",
       content: msg.content,
       timestamp: ts,
       id: `user-${ts}-${this.userMsgCounter++}`,
-    });
+    };
+    session.messageHistory.push(userBrowserMsg);
+
+    // Broadcast to all browsers so multi-client setups (TUI + web UI) see each other's input
+    this.broadcastToBrowsers(session, userBrowserMsg);
 
     // Build content: if images are present, use content block array; otherwise plain string
     let content: string | unknown[];
