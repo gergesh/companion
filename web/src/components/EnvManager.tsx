@@ -65,11 +65,13 @@ export function EnvManager({ onClose, embedded = false }: Props) {
     }).catch(() => {});
   }, []);
 
-  // Poll image states for any images that are currently pulling
+  // Track pulling images in a ref so the interval callback always reads current values
+  const pullingImagesRef = useRef<string[]>([]);
   useEffect(() => {
     const pullingImages = Object.entries(imageStates)
       .filter(([, s]) => s.status === "pulling")
       .map(([tag]) => tag);
+    pullingImagesRef.current = pullingImages;
 
     if (pullingImages.length === 0) {
       if (pullPollRef.current) {
@@ -81,7 +83,7 @@ export function EnvManager({ onClose, embedded = false }: Props) {
 
     if (!pullPollRef.current) {
       pullPollRef.current = setInterval(() => {
-        for (const tag of pullingImages) {
+        for (const tag of pullingImagesRef.current) {
           refreshImageStatus(tag);
         }
       }, 2000);

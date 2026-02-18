@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { CreationProgressEvent } from "../api.js";
 
 interface Props {
@@ -13,7 +13,12 @@ export function SessionCreationProgress({ steps, error }: Props) {
   // Accumulate detail lines per step (the store only keeps the latest event)
   const [detailLogs, setDetailLogs] = useState<Record<string, string[]>>({});
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
-  const logEndRef = useRef<HTMLPreElement>(null);
+  const logRefsMap = useRef<Map<string, HTMLPreElement>>(new Map());
+
+  const setLogRef = useCallback((step: string) => (el: HTMLPreElement | null) => {
+    if (el) logRefsMap.current.set(step, el);
+    else logRefsMap.current.delete(step);
+  }, []);
 
   // When a step's detail changes, append it to that step's log
   useEffect(() => {
@@ -38,9 +43,11 @@ export function SessionCreationProgress({ steps, error }: Props) {
     }
   }, [steps]);
 
-  // Auto-scroll log area
+  // Auto-scroll all expanded log areas
   useEffect(() => {
-    logEndRef.current?.scrollTo?.({ top: logEndRef.current.scrollHeight });
+    for (const el of logRefsMap.current.values()) {
+      el.scrollTo?.({ top: el.scrollHeight });
+    }
   }, [detailLogs]);
 
   if (steps.length === 0) return null;
@@ -116,7 +123,7 @@ export function SessionCreationProgress({ steps, error }: Props) {
               {/* Detail log area */}
               {hasLogs && isExpanded && (
                 <pre
-                  ref={logEndRef}
+                  ref={setLogRef(step.step)}
                   className="ml-[26px] mt-1 mb-1 px-3 py-2 text-[10px] font-mono-code bg-black/20 border border-cc-border rounded-md text-cc-muted max-h-[150px] overflow-auto whitespace-pre-wrap"
                 >
                   {logs.slice(-30).join("\n")}

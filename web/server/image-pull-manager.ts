@@ -88,6 +88,13 @@ class ImagePullManager {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        // Clean up the listener to avoid memory leaks
+        const arr = this.readyListeners.get(image);
+        if (arr) {
+          const idx = arr.indexOf(listener);
+          if (idx >= 0) arr.splice(idx, 1);
+          if (arr.length === 0) this.readyListeners.delete(image);
+        }
         resolve(result);
       };
 

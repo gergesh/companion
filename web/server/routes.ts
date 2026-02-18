@@ -470,7 +470,7 @@ export function createRoutes(
 
             // Stream pull progress lines to the client
             const unsub = imagePullManager.onProgress(effectiveImage, (line) => {
-              emitProgress(stream, "pulling_image", "Pulling Docker image...", "in_progress", line);
+              emitProgress(stream, "pulling_image", "Pulling Docker image...", "in_progress", line).catch(() => {});
             });
 
             const ready = await imagePullManager.waitForReady(effectiveImage, 300_000);
@@ -552,7 +552,7 @@ export function createRoutes(
                 {
                   timeout: initTimeout,
                   onOutput: (line) => {
-                    emitProgress(stream, "running_init_script", "Running init script...", "in_progress", line);
+                    emitProgress(stream, "running_init_script", "Running init script...", "in_progress", line).catch(() => {});
                   },
                 },
               );
