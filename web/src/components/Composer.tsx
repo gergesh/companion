@@ -46,6 +46,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const [mentionMenuIndex, setMentionMenuIndex] = useState(0);
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [savePromptName, setSavePromptName] = useState("");
+  const [savePromptError, setSavePromptError] = useState<string | null>(null);
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
   const [promptsLoading, setPromptsLoading] = useState(false);
   const [caretPos, setCaretPos] = useState(0);
@@ -151,11 +152,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
       setMentionMenuOpen(false);
     }
   }, [slashMenuOpen, mentionContext, mentionMenuOpen]);
-
-  useEffect(() => {
-    if (!mentionContext) return;
-    void refreshPrompts();
-  }, [mentionContext, refreshPrompts]);
 
   // Keep selected index in bounds
   useEffect(() => {
@@ -298,11 +294,6 @@ export function Composer({ sessionId }: { sessionId: string }) {
         selectPrompt(filteredPrompts[mentionMenuIndex]);
         return;
       }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setMentionMenuOpen(false);
-        return;
-      }
     }
 
     if (
@@ -404,8 +395,10 @@ export function Composer({ sessionId }: { sessionId: string }) {
       await refreshPrompts();
       setSavePromptOpen(false);
       setSavePromptName("");
-    } catch {
-      // Silent failure: keep composer responsive even if prompt save fails.
+      setSavePromptError(null);
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "Could not save prompt.";
+      setSavePromptError(message);
     }
   }
 
@@ -540,14 +533,23 @@ export function Composer({ sessionId }: { sessionId: string }) {
               <div className="text-xs font-semibold text-cc-fg">Save prompt</div>
               <input
                 value={savePromptName}
-                onChange={(e) => setSavePromptName(e.target.value)}
+                onChange={(e) => {
+                  setSavePromptName(e.target.value);
+                  if (savePromptError) setSavePromptError(null);
+                }}
                 placeholder="Prompt title"
                 className="w-full px-2 py-1.5 text-sm bg-cc-input-bg border border-cc-border rounded-md text-cc-fg focus:outline-none focus:border-cc-primary/40"
               />
               <div className="text-[11px] text-cc-muted">Scope: global • stored locally</div>
+              {savePromptError ? (
+                <div className="text-[11px] text-cc-error">{savePromptError}</div>
+              ) : null}
               <div className="flex items-center gap-1.5 justify-end">
                 <button
-                  onClick={() => setSavePromptOpen(false)}
+                  onClick={() => {
+                    setSavePromptOpen(false);
+                    setSavePromptError(null);
+                  }}
                   className="px-2 py-1 text-[11px] rounded-md border border-cc-border text-cc-muted hover:text-cc-fg cursor-pointer"
                 >
                   Cancel
@@ -617,6 +619,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 onClick={() => {
                   const defaultName = text.trim().slice(0, 32);
                   setSavePromptName(defaultName || "");
+                  setSavePromptError(null);
                   setSavePromptOpen((v) => !v);
                 }}
                 disabled={!isConnected || !text.trim()}
