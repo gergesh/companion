@@ -303,12 +303,19 @@ function handleParsedMessage(
         if (evt.type === "content_block_delta") {
           const delta = evt.delta as Record<string, unknown> | undefined;
           if (delta?.type === "text_delta" && typeof delta.text === "string") {
-            const current = store.streaming.get(sessionId) || "";
+            let current = store.streaming.get(sessionId) || "";
+            const thinkingPrefix = "Thinking:\n";
+            const responsePrefix = "\n\nResponse:\n";
+            if (current.startsWith(thinkingPrefix) && !current.includes(responsePrefix)) {
+              current += responsePrefix;
+            }
             store.setStreaming(sessionId, current + delta.text);
           }
           if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
             const current = store.streaming.get(sessionId) || "";
-            store.setStreaming(sessionId, current + delta.thinking);
+            const prefix = "Thinking:\n";
+            const base = current.startsWith(prefix) ? current : `${prefix}${current}`;
+            store.setStreaming(sessionId, base + delta.thinking);
           }
         }
 

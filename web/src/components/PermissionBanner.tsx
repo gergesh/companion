@@ -347,7 +347,7 @@ function AskUserQuestionDisplay({
                       onChange={(e) => handleCustomChange(i, e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleCustomSubmit(i); }}
                       placeholder="Type your answer..."
-                      className="flex-1 px-2.5 py-1.5 text-xs bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
+                      className="w-full px-2.5 py-1.5 text-xs bg-cc-input-bg border border-cc-border rounded-lg text-cc-fg placeholder:text-cc-muted focus:outline-none focus:border-cc-primary/50"
                       autoFocus
                     />
                   </div>
