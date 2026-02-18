@@ -12,6 +12,15 @@ interface QuickTerminalTab {
   containerId?: string;
 }
 
+type TerminalPlacement = "top" | "bottom" | "right";
+
+function getInitialTerminalPlacement(): TerminalPlacement {
+  if (typeof window === "undefined") return "bottom";
+  const stored = window.localStorage.getItem("cc-terminal-placement");
+  if (stored === "top" || stored === "bottom" || stored === "right") return stored;
+  return "bottom";
+}
+
 export function TopBar() {
   const hash = useSyncExternalStore(
     (cb) => {
@@ -38,6 +47,7 @@ export function TopBar() {
   const [terminalPanelOpen, setTerminalPanelOpen] = useState(false);
   const [terminalTabs, setTerminalTabs] = useState<QuickTerminalTab[]>([]);
   const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(null);
+  const [terminalPlacement, setTerminalPlacement] = useState<TerminalPlacement>(getInitialTerminalPlacement);
   const changedFilesCount = useStore((s) => {
     if (!currentSessionId) return 0;
     const cwd =
@@ -69,17 +79,12 @@ export function TopBar() {
   const isContainerized = !!(sdkSession?.containerId || bridgeSession?.is_containerized);
 
   const openQuickTerminal = useCallback((opts: { target: "host" | "docker"; cwd: string; containerId?: string }) => {
-    const key = `${opts.target}:${opts.cwd}:${opts.containerId || ""}`;
-    const existing = terminalTabs.find((t) => t.id === key);
-    if (existing) {
-      setActiveTerminalTabId(existing.id);
-      setTerminalPanelOpen(true);
-      return;
-    }
+    const hostCount = terminalTabs.filter((t) => !t.containerId).length;
+    const dockerCount = terminalTabs.filter((t) => !!t.containerId).length;
 
     const next: QuickTerminalTab = {
-      id: key,
-      label: opts.target === "docker" ? "Docker" : "Machine",
+      id: `${opts.target}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      label: opts.target === "docker" ? `Docker ${dockerCount + 1}` : `Host ${hostCount + 1}`,
       cwd: opts.cwd,
       containerId: opts.containerId,
     };
@@ -106,6 +111,10 @@ export function TopBar() {
       setTerminalPanelOpen(false);
     }
   }, [currentSessionId]);
+
+  useEffect(() => {
+    window.localStorage.setItem("cc-terminal-placement", terminalPlacement);
+  }, [terminalPlacement]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -276,7 +285,13 @@ export function TopBar() {
       )}
 
       {currentSessionId && isSessionView && terminalPanelOpen && terminalTabs.length > 0 && (
-        <div className="absolute left-2 right-2 top-[calc(100%+8px)] z-50 rounded-xl border border-cc-border bg-cc-card shadow-2xl overflow-hidden">
+        <div className={`fixed z-50 rounded-xl border border-cc-border bg-cc-card shadow-2xl overflow-hidden ${
+          terminalPlacement === "top"
+            ? "left-2 right-2 top-[60px] h-[360px]"
+            : terminalPlacement === "right"
+              ? "right-2 top-[60px] bottom-2 w-[420px]"
+              : "left-2 right-2 bottom-[80px] h-[360px]"
+        }`}>
           <div className="flex items-center justify-between px-2 py-1.5 border-b border-cc-border bg-cc-sidebar">
             <div className="flex items-center gap-1.5 min-w-0 overflow-x-auto">
               {terminalTabs.map((tab) => (
@@ -316,13 +331,35 @@ export function TopBar() {
             </div>
 
             <div className="flex items-center gap-1">
+              <div className="hidden sm:flex items-center gap-0.5 bg-cc-hover rounded-md p-0.5 mr-1">
+                {(["top", "bottom", "right"] as TerminalPlacement[]).map((placement) => (
+                  <button
+                    key={placement}
+                    onClick={() => setTerminalPlacement(placement)}
+                    className={`px-2 py-1 rounded text-[10px] font-medium cursor-pointer ${
+                      terminalPlacement === placement
+                        ? "bg-cc-card text-cc-fg"
+                        : "text-cc-muted hover:text-cc-fg"
+                    }`}
+                    title={
+                      placement === "top"
+                        ? "Place terminal at top"
+                        : placement === "right"
+                          ? "Place terminal at right"
+                          : "Place terminal above input"
+                    }
+                  >
+                    {placement === "top" ? "Top" : placement === "right" ? "Right" : "Bottom"}
+                  </button>
+                ))}
+              </div>
               {cwd && (
                 <button
                   onClick={() => openQuickTerminal({ target: "host", cwd })}
                   className="px-2 py-1 rounded-md text-[11px] text-cc-muted hover:text-cc-fg hover:bg-cc-hover transition-colors cursor-pointer"
-                  title="Open terminal on machine"
+                  title="Open terminal on host machine"
                 >
-                  + Machine
+                  + Host
                 </button>
               )}
               {isContainerized && sdkSession?.containerId && (
@@ -343,7 +380,7 @@ export function TopBar() {
             </div>
           </div>
 
-          <div className="h-[340px] bg-cc-bg p-2">
+          <div className="h-[calc(100%-38px)] bg-cc-bg p-2">
             {terminalTabs.map((tab) => (
               <div key={tab.id} className={activeTerminalTabId === tab.id ? "h-full" : "hidden"}>
                 <TerminalView

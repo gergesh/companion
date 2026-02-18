@@ -1262,14 +1262,28 @@ function Card({ label, children }: { label: string; children: React.ReactNode })
 
 function PlaygroundTerminalTabsMock() {
   const tabs = [
-    { id: "host", label: "Machine", cwd: "/Users/demo/project" },
+    { id: "host", label: "Host 1", cwd: "/Users/demo/project" },
     { id: "docker", label: "Docker", cwd: "/workspace" },
   ];
   const [active, setActive] = useState("host");
+  const [placement, setPlacement] = useState<"top" | "bottom" | "right">("bottom");
 
   return (
     <div className="rounded-xl border border-cc-border bg-cc-card overflow-hidden">
       <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-cc-border bg-cc-sidebar">
+        <div className="flex items-center gap-0.5 bg-cc-hover rounded-md p-0.5 mr-1">
+          {(["top", "bottom", "right"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPlacement(p)}
+              className={`px-2 py-1 rounded text-[10px] font-medium cursor-pointer ${
+                placement === p ? "bg-cc-card text-cc-fg" : "text-cc-muted"
+              }`}
+            >
+              {p === "bottom" ? "Bottom" : p === "top" ? "Top" : "Right"}
+            </button>
+          ))}
+        </div>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -1288,7 +1302,7 @@ function PlaygroundTerminalTabsMock() {
         </span>
       </div>
       <div className="h-28 flex items-center justify-center text-xs text-cc-muted bg-cc-bg">
-        Embedded terminal panel preview
+        Embedded terminal panel preview ({placement})
       </div>
     </div>
   );

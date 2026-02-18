@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
 vi.mock("../api.js", () => ({
   api: {
     relaunchSession: vi.fn().mockResolvedValue({ ok: true }),
   },
+}));
+
+vi.mock("./TerminalView.js", () => ({
+  TerminalView: ({ title, cwd }: { title?: string; cwd: string }) => (
+    <div data-testid="terminal-view">{title || cwd}</div>
+  ),
 }));
 
 interface MockStoreState {
@@ -52,6 +58,7 @@ import { TopBar } from "./TopBar.js";
 beforeEach(() => {
   vi.clearAllMocks();
   resetStore();
+  window.localStorage.clear();
 });
 
 describe("TopBar", () => {
@@ -77,5 +84,17 @@ describe("TopBar", () => {
 
     render(<TopBar />);
     expect(screen.queryByText("1")).not.toBeInTheDocument();
+  });
+
+  it("opens quick terminal panel on click (not on hover)", () => {
+    render(<TopBar />);
+
+    const btn = screen.getByRole("button", { name: "Terminal" });
+    fireEvent.mouseOver(btn);
+    expect(screen.queryByText("Host 1")).not.toBeInTheDocument();
+
+    fireEvent.click(btn);
+    expect(screen.getByText("Host 1")).toBeInTheDocument();
+    expect(screen.getByTestId("terminal-view")).toHaveTextContent("/repo");
   });
 });
