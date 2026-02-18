@@ -1,6 +1,6 @@
 import { useStore } from "./store.js";
 import type { BrowserIncomingMessage, BrowserOutgoingMessage, ContentBlock, ChatMessage, TaskItem, SdkSessionInfo, McpServerConfig } from "./types.js";
-import { generateUniqueSessionName } from "./utils/names.js";
+import { generateSessionName } from "./utils/names.js";
 import { playNotificationSound } from "./utils/notification-sound.js";
 
 const sockets = new Map<string, WebSocket>();
@@ -241,9 +241,7 @@ function handleParsedMessage(
         store.setSessionStatus(sessionId, "idle");
       }
       if (!store.sessionNames.has(sessionId)) {
-        const existingNames = new Set(store.sessionNames.values());
-        const name = generateUniqueSessionName(existingNames);
-        store.setSessionName(sessionId, name);
+        store.setSessionName(sessionId, generateSessionName(sessionId));
       }
       break;
     }

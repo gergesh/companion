@@ -3,7 +3,7 @@ import { useStore } from "../store.js";
 import { api, createSessionStream, type CompanionEnv, type GitRepoInfo, type GitBranchInfo, type BackendInfo, type ImagePullState } from "../api.js";
 import { connectSession, waitForConnection, sendToSession } from "../ws.js";
 import { disconnectSession } from "../ws.js";
-import { generateUniqueSessionName } from "../utils/names.js";
+import { generateSessionName } from "../utils/names.js";
 import { getRecentDirs, addRecentDir } from "../utils/recent-dirs.js";
 import { navigateToSession } from "../utils/routing.js";
 import { getModelsForBackend, getModesForBackend, getDefaultModel, getDefaultMode, toModelOptions, type ModelOption } from "../utils/backends.js";
@@ -355,9 +355,8 @@ export function HomePage() {
       );
       const sessionId = result.sessionId;
 
-      // Assign a random session name
-      const existingNames = new Set(useStore.getState().sessionNames.values());
-      const sessionName = generateUniqueSessionName(existingNames);
+      // Assign a deterministic session name based on session ID
+      const sessionName = generateSessionName(sessionId);
       useStore.getState().setSessionName(sessionId, sessionName);
 
       // Save cwd to recent dirs

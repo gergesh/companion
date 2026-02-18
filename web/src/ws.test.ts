@@ -4,7 +4,7 @@ import type { SessionState, PermissionRequest, ContentBlock } from "./types.js";
 
 // Mock the names utility before any imports
 vi.mock("./utils/names.js", () => ({
-  generateUniqueSessionName: vi.fn(() => "Test Session"),
+  generateSessionName: vi.fn(() => "Test Session"),
 }));
 
 let wsModule: typeof import("./ws.js");
@@ -122,9 +122,11 @@ describe("connectSession", () => {
 
     lastWs.onopen?.(new Event("open"));
 
-    expect(lastWs.send).toHaveBeenCalledWith(
-      JSON.stringify({ type: "session_subscribe", last_seq: 12 }),
-    );
+    expect(lastWs.send).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(lastWs.send.mock.calls[0][0]);
+    expect(sent.type).toBe("session_subscribe");
+    expect(sent.last_seq).toBe(12);
+    expect(typeof sent.client_id).toBe("string");
   });
 });
 

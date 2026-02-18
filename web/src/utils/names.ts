@@ -12,16 +12,19 @@ const nouns = [
   "Fern", "Harbor", "Iris", "Jade", "Lotus", "Mesa", "Nova", "Orbit", "Pebble", "Summit",
 ];
 
-export function generateSessionName(): string {
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  return `${adj} ${noun}`;
+/** Simple string hash (djb2) — deterministic, no crypto needed. */
+function hashString(s: string): number {
+  let hash = 5381;
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) + hash + s.charCodeAt(i)) >>> 0;
+  }
+  return hash;
 }
 
-export function generateUniqueSessionName(existingNames: Set<string>): string {
-  for (let i = 0; i < 100; i++) {
-    const name = generateSessionName();
-    if (!existingNames.has(name)) return name;
-  }
-  return generateSessionName();
+/** Generate a deterministic session name from a session ID. */
+export function generateSessionName(sessionId: string): string {
+  const h = hashString(sessionId);
+  const adj = adjectives[h % adjectives.length]!;
+  const noun = nouns[Math.floor(h / adjectives.length) % nouns.length]!;
+  return `${adj} ${noun}`;
 }
