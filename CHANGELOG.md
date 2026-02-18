@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.1](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.51.0...the-companion-v0.51.1) (2026-02-18)
+
+
+### Bug Fixes
+
+* **ui:** improve thinking, tool results, and question prompts ([#321](https://github.com/The-Vibe-Company/companion/issues/321)) ([5c3dd7c](https://github.com/The-Vibe-Company/companion/commit/5c3dd7c501bc23b52c56fee6d5a3995545f8730b))
+
 ## [0.51.0](https://github.com/The-Vibe-Company/companion/compare/the-companion-v0.50.3...the-companion-v0.51.0) (2026-02-18)
 
 
