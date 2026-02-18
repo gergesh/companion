@@ -141,6 +141,9 @@ function nextClientMsgId(): string {
   return `cmsg-${Date.now()}-${++clientMsgCounter}`;
 }
 
+// Stable client identity for this tab — used to identify our own echoed messages
+const clientId = `browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 const IDEMPOTENT_OUTGOING_TYPES = new Set<BrowserOutgoingMessage["type"]>([
   "user_message",
   "permission_response",
@@ -455,6 +458,18 @@ function handleParsedMessage(
       break;
     }
 
+    case "user_message": {
+      // Skip our own echoes; show messages from other clients
+      if (data.sender_client_id === clientId) break;
+      store.appendMessage(sessionId, {
+        id: data.id || nextId(),
+        role: "user",
+        content: data.content,
+        timestamp: data.timestamp,
+      });
+      break;
+    }
+
     case "error": {
       store.appendMessage(sessionId, {
         id: nextId(),
@@ -592,7 +607,7 @@ export function connectSession(sessionId: string) {
   ws.onopen = () => {
     useStore.getState().setConnectionStatus(sessionId, "connected");
     const lastSeq = getLastSeq(sessionId);
-    ws.send(JSON.stringify({ type: "session_subscribe", last_seq: lastSeq }));
+    ws.send(JSON.stringify({ type: "session_subscribe", last_seq: lastSeq, client_id: clientId }));
     // Clear any reconnect timer
     const timer = reconnectTimers.get(sessionId);
     if (timer) {
