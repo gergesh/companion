@@ -249,6 +249,27 @@ function AskUserQuestionDisplay({
     });
   }
 
+  function handleCustomToggle(questionIdx: number) {
+    const key = String(questionIdx);
+    setShowCustom((prev) => {
+      const wasOpen = Boolean(prev[key]);
+      const next = { ...prev, [key]: !wasOpen };
+      if (wasOpen) {
+        setSelections((s) => {
+          const cleared = { ...s };
+          delete cleared[key];
+          return cleared;
+        });
+        setCustomText((t) => {
+          const cleared = { ...t };
+          delete cleared[key];
+          return cleared;
+        });
+      }
+      return next;
+    });
+  }
+
   function handleSubmitAll() {
     onSelect(selections);
   }
@@ -321,7 +342,7 @@ function AskUserQuestionDisplay({
 
                 {/* "Other" option */}
                 <button
-                  onClick={() => setShowCustom((prev) => ({ ...prev, [key]: !prev[key] }))}
+                  onClick={() => handleCustomToggle(i)}
                   disabled={disabled}
                   className={`w-full text-left px-3 py-2 rounded-lg border transition-all cursor-pointer disabled:opacity-50 ${
                     isCustom

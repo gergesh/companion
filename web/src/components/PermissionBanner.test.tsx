@@ -473,6 +473,40 @@ describe("AskUserQuestionDisplay", () => {
     fireEvent.click(screen.getByText("Other..."));
     expect(screen.getByText("Press Enter to submit")).toBeTruthy();
   });
+
+  it("clears custom Other answer when toggled off before submit", () => {
+    const perm = makePermission({
+      request_id: "req-ask-3",
+      tool_name: "AskUserQuestion",
+      input: {
+        questions: [
+          {
+            header: "Q1",
+            question: "Primary",
+            options: [{ label: "Keep", description: "Use default" }],
+          },
+          {
+            header: "Q2",
+            question: "Details",
+            options: [{ label: "Preset", description: "Use preset value" }],
+          },
+        ],
+      },
+    });
+    render(<PermissionBanner permission={perm} sessionId="s1" />);
+
+    const otherButtons = screen.getAllByText("Other...");
+    fireEvent.click(otherButtons[1]);
+    const input = screen.getByPlaceholderText("Type your answer...");
+    fireEvent.change(input, { target: { value: "Stale answer" } });
+    fireEvent.click(otherButtons[1]); // toggle off
+
+    fireEvent.click(screen.getByText("Keep"));
+    fireEvent.click(screen.getByText("Submit answers"));
+
+    const payload = mockSendToSession.mock.calls[0][1];
+    expect(payload.updated_input.answers).toEqual({ "0": "Keep" });
+  });
 });
 
 // ─── ExitPlanModeDisplay ─────────────────────────────────────────────────────
